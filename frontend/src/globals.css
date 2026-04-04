@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* MBA Color Palette */
+    --navy: #1e3a5f;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --neutral: #64748b;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900;
+  }
+}

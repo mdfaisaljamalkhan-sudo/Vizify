@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip install python-docx pdfplumber --upgrade)",
+      "Bash(\"C:\\\\Users\\\\Faisal\\\\MyApps\\\\ActualX\\\\SubaDash\\\\backend\\\\.venv\\\\Scripts\\\\pip\" install:*)"
+    ]
+  }
+}
