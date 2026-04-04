@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
     /* MBA Color Palette */
@@ -12,6 +14,6 @@
 
 @layer base {
   body {
-    @apply bg-white text-gray-900;
+    @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-50;
   }
 }

@@ -71,3 +71,16 @@ export const analyzeData = async (
 export const getProviders = async () => {
   return apiClient.get('/api/analyze/providers')
 }
+
+// Chat with dashboard
+export const chatWithDashboard = async (
+  message: string,
+  extractedText: string,
+  dashboardContext: any
+) => {
+  return apiClient.post('/api/chat', {
+    message,
+    extracted_text: extractedText,
+    dashboard_context: dashboardContext,
+  })
+}

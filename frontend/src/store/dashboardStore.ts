@@ -29,6 +29,8 @@ interface DashboardStore {
   dashboard: DashboardData | null
   setDashboard: (data: DashboardData) => void
   clearDashboard: () => void
+  extractedText: string | null
+  setExtractedText: (text: string) => void
   isLoading: boolean
   setIsLoading: (loading: boolean) => void
   error: string | null
@@ -39,6 +41,8 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   dashboard: null,
   setDashboard: (data) => set({ dashboard: data }),
   clearDashboard: () => set({ dashboard: null }),
+  extractedText: null,
+  setExtractedText: (text) => set({ extractedText: text }),
   isLoading: false,
   setIsLoading: (loading) => set({ isLoading: loading }),
   error: null,

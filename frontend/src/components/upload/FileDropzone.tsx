@@ -10,7 +10,7 @@ const MAX_SIZE = 25 * 1024 * 1024 // 25MB
 
 export function FileDropzone() {
   const navigate = useNavigate()
-  const { setIsLoading, setError, setDashboard } = useDashboardStore()
+  const { setIsLoading, setError, setDashboard, setExtractedText } = useDashboardStore()
   const [uploadProgress, setUploadProgress] = useState(0)
 
   const onDrop = useCallback(
@@ -38,6 +38,7 @@ export function FileDropzone() {
         // Upload file
         const uploadResponse = await uploadFile(file)
         const { extracted_text, file_schema } = uploadResponse.data
+        setExtractedText(extracted_text)
 
         setUploadProgress(60)
 

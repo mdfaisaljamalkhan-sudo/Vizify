@@ -29,7 +29,7 @@ export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
       case 'waterfall':
         return <PLWaterfall data={chart.data} x_key={chart.x_key} y_keys={chart.y_keys} />
       default:
-        return <div className="text-gray-500 text-center py-8">Chart type not yet supported</div>
+        return <div className="text-gray-500 dark:text-gray-400 text-center py-8">Chart type not yet supported</div>
     }
   }
 
@@ -37,14 +37,14 @@ export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
     <div className="space-y-8 print:space-y-4">
       {/* Title */}
       <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">{dashboard.title}</h1>
-        <p className="text-gray-600 text-sm">Type: {dashboard.dashboard_type}</p>
+        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">{dashboard.title}</h1>
+        <p className="text-gray-600 dark:text-gray-400 text-sm">Type: {dashboard.dashboard_type}</p>
       </div>
 
       {/* KPIs Grid */}
       {dashboard.kpis && dashboard.kpis.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Key Performance Indicators</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Key Performance Indicators</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {dashboard.kpis.map((kpi, i) => (
               <KPICard key={i} {...kpi} />
@@ -56,7 +56,7 @@ export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
       {/* Charts */}
       {dashboard.charts && dashboard.charts.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Analytics</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Analytics</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {dashboard.charts.map((chart, i) => (
               <ChartCard key={i} title={chart.title}>
