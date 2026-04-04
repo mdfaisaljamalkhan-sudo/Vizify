@@ -25,14 +25,18 @@ export function InsightsPanel({
           <Lightbulb className="w-5 h-5 text-yellow-600" />
           <h3 className="text-lg font-semibold text-gray-900">Key Insights</h3>
         </div>
-        <ul className="space-y-3">
-          {insights.map((insight, i) => (
-            <li key={i} className="flex gap-3 text-gray-700">
-              <span className="text-yellow-600 font-bold min-w-fit">•</span>
-              <span>{insight}</span>
-            </li>
-          ))}
-        </ul>
+        {insights.length > 0 ? (
+          <ul className="space-y-3">
+            {insights.map((insight, i) => (
+              <li key={i} className="flex gap-3 text-gray-700">
+                <span className="text-yellow-600 font-bold min-w-fit">•</span>
+                <span>{insight}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-500 italic">No insights generated — try re-analyzing with different data.</p>
+        )}
       </div>
 
       {/* Recommendations */}
@@ -41,14 +45,18 @@ export function InsightsPanel({
           <Target className="w-5 h-5 text-green-600" />
           <h3 className="text-lg font-semibold text-gray-900">Recommendations</h3>
         </div>
-        <ul className="space-y-3">
-          {recommendations.map((rec, i) => (
-            <li key={i} className="flex gap-3 text-gray-700">
-              <span className="text-green-600 font-bold min-w-fit">→</span>
-              <span>{rec}</span>
-            </li>
-          ))}
-        </ul>
+        {recommendations.length > 0 ? (
+          <ul className="space-y-3">
+            {recommendations.map((rec, i) => (
+              <li key={i} className="flex gap-3 text-gray-700">
+                <span className="text-green-600 font-bold min-w-fit">→</span>
+                <span>{rec}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-gray-500 italic">No recommendations generated — try re-analyzing with different data.</p>
+        )}
       </div>
     </div>
   )
