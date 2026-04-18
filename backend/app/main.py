@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import settings, Base, engine
-from app.routers import upload, analyze, dashboards, shared, auth, chat
+from app.routers import upload, analyze, dashboards, shared, auth, chat, quality
 from app.models.user import User
 from app.models.dashboard import Dashboard, DashboardShare
 from app.models.dashboard_version import DashboardVersion
@@ -35,6 +35,7 @@ app.include_router(analyze.router)
 app.include_router(dashboards.router)
 app.include_router(shared.router)
 app.include_router(chat.router)
+app.include_router(quality.router)
 
 @app.get("/api/health")
 async def health_check():

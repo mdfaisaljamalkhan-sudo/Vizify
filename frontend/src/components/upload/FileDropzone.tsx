@@ -46,12 +46,12 @@ export function FileDropzone() {
         const analyzeResponse = await analyzeData(extracted_text, file_schema)
         setUploadProgress(90)
 
-        // Navigate to dashboard
+        // Navigate to data quality check
         setDashboard(analyzeResponse.data.dashboard)
         setUploadProgress(100)
 
         setTimeout(() => {
-          navigate('/dashboard')
+          navigate('/quality')
         }, 500)
       } catch (err: any) {
         const message = err.response?.data?.detail || err.message || 'Upload failed'
