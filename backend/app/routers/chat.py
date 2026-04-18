@@ -1,8 +1,15 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from anthropic import Anthropic
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from app.schemas.chat import ChatRequest, ChatResponse
-from app.database import settings
+from app.schemas.chat_edit import ChatEditRequest, ChatEditResponse, UndoRequest
+from app.database import settings, get_db
+from app.services.chat_editor_service import ChatEditorService
+from app.dependencies import get_current_user
+from app.models.dashboard_version import DashboardVersion
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -51,3 +58,72 @@ Be specific with numbers, percentages, and data from the provided information.""
     except Exception as e:
         logger.error(f"Chat failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@router.post("/chat/edit", response_model=ChatEditResponse)
+async def edit_dashboard(
+    request: ChatEditRequest,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatEditResponse:
+    """
+    Edit a dashboard using natural language via LLM.
+    Generates Python code, executes safely in a sandbox, and saves version history.
+    """
+    service = ChatEditorService()
+    result = await service.process_edit_request(
+        message=request.message,
+        dashboard_id=request.dashboard_id,
+        user_id=user_id,
+        extracted_text=request.extracted_text,
+        db=db,
+    )
+    return result
+
+
+@router.get("/chat/edit/history/{dashboard_id}")
+async def get_edit_history(
+    dashboard_id: str,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get version history for a dashboard."""
+    service = ChatEditorService()
+    history = await service.get_edit_history(
+        dashboard_id=dashboard_id,
+        user_id=user_id,
+        db=db,
+    )
+    return {"history": history}
+
+
+@router.post("/chat/edit/undo", response_model=ChatEditResponse)
+async def undo_edit(
+    request: UndoRequest,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatEditResponse:
+    """Revert a dashboard to a previous version."""
+    service = ChatEditorService()
+
+    # If no target version specified, undo last change
+    if request.target_version is None:
+        stmt = (
+            select(DashboardVersion)
+            .where(DashboardVersion.dashboard_id == request.dashboard_id)
+            .order_by(DashboardVersion.version_number.desc())
+        )
+        result = await db.execute(stmt)
+        latest = result.scalars().first()
+        if not latest:
+            raise HTTPException(status_code=404, detail="No versions to undo to")
+        # Undo to the previous version
+        request.target_version = max(1, latest.version_number - 1)
+
+    result = await service.undo_to_version(
+        dashboard_id=request.dashboard_id,
+        user_id=user_id,
+        target_version=request.target_version,
+        db=db,
+    )
+    return result
