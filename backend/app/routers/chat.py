@@ -38,7 +38,7 @@ Now, please answer this question: {request.message}
 Be specific with numbers, percentages, and data from the provided information."""
 
         response = client.messages.create(
-            model="claude-opus-4-6",
+            model=settings.anthropic_model_chat,
             max_tokens=1024,
             system="You are a data analyst assistant. Answer questions about business data with specificity and reference to the actual data provided. Provide actionable insights and be concise.",
             messages=[

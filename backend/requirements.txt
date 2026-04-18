@@ -20,3 +20,6 @@ openpyxl
 numpy
 python-dateutil
 jinja2
+asyncpg
+python-dotenv
+pyarrow

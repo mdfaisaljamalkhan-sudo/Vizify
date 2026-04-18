@@ -12,23 +12,35 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
 
     # LLM Provider Settings
-    analyzer_provider: str = "claude"  # Options: claude, openai, deepseek, ollama
+    analyzer_provider: str = "claude"  # Options: claude, openai, deepseek, ollama, groq, gemini
     anthropic_api_key: str = ""
+    anthropic_model_analyze: str = "claude-haiku-4-5-20251001"
+    anthropic_model_chat: str = "claude-haiku-4-5-20251001"
     openai_api_key: str = ""
     deepseek_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434/v1"
+    groq_api_key: str = ""
+    gemini_api_key: str = ""
+    # Comma-separated fallback chain, e.g. "claude,groq,gemini"
+    llm_fallback_chain: str = "claude,groq,gemini"
     max_analysis_input_tokens: int = 8000
 
     # Stripe Settings
     stripe_secret_key: str = ""
 
     # App Settings
-    cors_origins: list = ["http://localhost:5173", "http://localhost:3000"]
+    # Comma-separated origins via FRONTEND_ORIGIN env var; legacy list kept as dev fallback.
+    frontend_origin: str = "http://localhost:5173,http://localhost:3000"
     environment: str = "development"
+    max_upload_mb: int = 25
 
     class Config:
         env_file = ".env"
         case_sensitive = False
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.frontend_origin.split(",") if o.strip()]
 
 settings = Settings()
 

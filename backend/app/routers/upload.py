@@ -1,19 +1,24 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from pathlib import Path
-import shutil
+from typing import Optional
+import io
+import uuid
 import os
 from app.services.file_parser import FileParser
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
-# Configure upload directory
+# Configure upload directories
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+PARQUET_DIR = Path("uploads/parquets")
+PARQUET_DIR.mkdir(exist_ok=True)
 
 # Max file size: 25MB for MVP
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".docx", ".pdf", ".json"}
+TABULAR_EXTENSIONS = {".csv", ".xlsx", ".xls", ".json"}
 
 
 class UploadResponse(BaseModel):
@@ -22,7 +27,8 @@ class UploadResponse(BaseModel):
     file_size: int
     file_type: str
     extracted_text: str
-    file_schema: dict = None  # Renamed from 'schema' to avoid shadowing
+    file_schema: dict = None
+    parquet_path: Optional[str] = None  # set for tabular files; used by chat sandbox
 
 
 class UploadErrorResponse(BaseModel):
@@ -63,13 +69,16 @@ async def upload_file(
         # Parse file
         extracted_text, schema = await FileParser.parse_file(content, file.filename)
 
-        # Save file to uploads directory (optional, for record-keeping)
+        # Save raw file temporarily for record-keeping
         file_path = UPLOAD_DIR / file.filename
         with open(file_path, "wb") as f:
             f.write(content)
-
-        # Schedule cleanup after 24 hours
         background_tasks.add_task(cleanup_file, file_path)
+
+        # For tabular files, also save a parquet snapshot for the chat sandbox (Track B)
+        parquet_path: Optional[str] = None
+        if file_ext in TABULAR_EXTENSIONS:
+            parquet_path = _save_parquet(content, file.filename, file_ext)
 
         return UploadResponse(
             success=True,
@@ -78,12 +87,38 @@ async def upload_file(
             file_type=file_ext,
             extracted_text=extracted_text,
             file_schema=schema,
+            parquet_path=parquet_path,
         )
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+def _save_parquet(content: bytes, filename: str, file_ext: str) -> Optional[str]:
+    """Convert tabular file to parquet and persist it. Returns path string or None on failure."""
+    try:
+        import pandas as pd
+        if file_ext == ".csv":
+            import chardet
+            enc = chardet.detect(content).get("encoding", "utf-8")
+            df = pd.read_csv(io.BytesIO(content), encoding=enc)
+        elif file_ext in (".xlsx", ".xls"):
+            df = pd.read_excel(io.BytesIO(content))
+        elif file_ext == ".json":
+            df = pd.read_json(io.BytesIO(content))
+        else:
+            return None
+
+        stem = Path(filename).stem
+        key = f"{stem}_{uuid.uuid4().hex[:8]}.parquet"
+        dest = PARQUET_DIR / key
+        df.to_parquet(dest, index=False)
+        return str(dest)
+    except Exception:
+        # Parquet save is best-effort; don't fail the upload if pyarrow isn't installed yet
+        return None
 
 
 async def cleanup_file(file_path: Path):

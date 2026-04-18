@@ -8,83 +8,92 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["analyze"])
 
+ALL_PROVIDERS = ["claude", "openai", "deepseek", "ollama", "groq", "gemini"]
+
+
+def _key_kwargs() -> dict:
+    return {
+        "anthropic_api_key": settings.anthropic_api_key,
+        "openai_api_key": settings.openai_api_key,
+        "deepseek_api_key": settings.deepseek_api_key,
+        "ollama_base_url": settings.ollama_base_url,
+        "groq_api_key": settings.groq_api_key,
+        "gemini_api_key": settings.gemini_api_key,
+    }
+
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_data(request: AnalyzeRequest) -> AnalyzeResponse:
     """
-    Analyze extracted file data using LLM and generate structured dashboard
-
-    Request body:
-    - extracted_text: Text extracted from the uploaded file
-    - file_schema: Metadata about the file (columns, dtypes, sample data, etc.)
-    - provider: (Optional) Override default analyzer provider
-
-    Returns: Dashboard schema with KPIs, charts, insights, and recommendations
+    Analyze extracted file data using LLM and generate structured dashboard.
+    When no provider is specified, runs the configured fallback chain
+    (ANTHROPIC → GROQ → GEMINI) so analysis succeeds even if credits run out.
     """
-
     try:
-        # Determine provider
-        provider = request.provider or settings.analyzer_provider
-
-        # Validate provider
-        valid_providers = ["claude", "openai", "deepseek", "ollama"]
-        if provider not in valid_providers:
-            raise ValueError(
-                f"Invalid provider: {provider}. Must be one of: {', '.join(valid_providers)}"
+        if request.provider:
+            # Explicit provider — single attempt, no fallback
+            if request.provider not in ALL_PROVIDERS:
+                raise ValueError(
+                    f"Invalid provider: {request.provider}. Must be one of: {', '.join(ALL_PROVIDERS)}"
+                )
+            dashboard = await AnalyzerService.analyze(
+                provider=request.provider,
+                extracted_text=request.extracted_text,
+                file_schema=request.file_schema,
+                **_key_kwargs(),
             )
+            return AnalyzeResponse(success=True, dashboard=dashboard)
 
-        # Get API keys based on provider
-        api_keys = {
-            "anthropic_api_key": settings.anthropic_api_key,
-            "openai_api_key": settings.openai_api_key,
-            "deepseek_api_key": settings.deepseek_api_key,
-            "ollama_base_url": settings.ollama_base_url,
-        }
-
-        # Analyze data
-        dashboard = await AnalyzerService.analyze(
-            provider=provider,
+        # No provider specified — use fallback chain from settings
+        chain = [p.strip() for p in settings.llm_fallback_chain.split(",") if p.strip()]
+        dashboard, used = await AnalyzerService.analyze_with_fallback(
+            chain=chain,
             extracted_text=request.extracted_text,
             file_schema=request.file_schema,
-            **api_keys,
+            **_key_kwargs(),
         )
-
         return AnalyzeResponse(success=True, dashboard=dashboard)
 
     except ValueError as e:
         logger.error(f"Analysis validation error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
-
     except Exception as e:
         logger.error(f"Analysis failed: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail=f"Analysis failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @router.get("/analyze/providers")
 async def get_available_providers():
-    """Get list of available analyzer providers and their configuration status"""
+    """List available analyzer providers and their configuration status."""
     providers = {
         "claude": {
             "enabled": bool(settings.anthropic_api_key),
-            "description": "Anthropic Claude (requires ANTHROPIC_API_KEY)",
+            "description": "Anthropic Claude Haiku (ANTHROPIC_API_KEY)",
         },
         "openai": {
             "enabled": bool(settings.openai_api_key),
-            "description": "OpenAI GPT models (requires OPENAI_API_KEY)",
+            "description": "OpenAI GPT-4o-mini (OPENAI_API_KEY)",
         },
         "deepseek": {
             "enabled": bool(settings.deepseek_api_key),
-            "description": "Deepseek models (requires DEEPSEEK_API_KEY)",
+            "description": "Deepseek Chat (DEEPSEEK_API_KEY)",
         },
         "ollama": {
             "enabled": True,
-            "description": f"Local Ollama models (requires Ollama running at {settings.ollama_base_url})",
+            "description": f"Local Ollama ({settings.ollama_base_url})",
+        },
+        "groq": {
+            "enabled": bool(settings.groq_api_key),
+            "description": "Groq Llama 3.1 70B — free tier fallback (GROQ_API_KEY)",
+        },
+        "gemini": {
+            "enabled": bool(settings.gemini_api_key),
+            "description": "Google Gemini 1.5 Flash — free tier fallback (GEMINI_API_KEY)",
         },
     }
 
     return {
         "default_provider": settings.analyzer_provider,
+        "fallback_chain": settings.llm_fallback_chain,
         "providers": providers,
     }

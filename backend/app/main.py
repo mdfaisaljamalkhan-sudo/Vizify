@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine
 from app.database import settings, Base, engine
 from app.routers import upload, analyze, dashboards, shared, auth, chat
 from app.models.user import User
@@ -24,11 +23,9 @@ app.add_middleware(
 # Initialize database tables on startup
 @app.on_event("startup")
 async def startup_event():
-    """Create all database tables on startup"""
-    # Create sync engine for table creation
-    sync_engine = create_engine("sqlite:///./subadash.db")
-    Base.metadata.create_all(bind=sync_engine)
-    sync_engine.dispose()
+    """Create all database tables on startup using the configured async engine."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 # Register routers
 app.include_router(auth.router)
@@ -49,5 +46,6 @@ async def root():
     return {"message": "SubaDash Data-to-Dashboard Backend", "version": "0.1.0"}
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=int(os.environ.get("PORT", 8002)), reload=True)

@@ -6,14 +6,15 @@ import sys
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(backend_dir)
 
-# Load environment variables from .env BEFORE importing app
-with open('.env') as f:
-    for line in f:
-        if line.strip() and not line.startswith('#'):
-            key, value = line.strip().split('=', 1)
-            os.environ[key] = value
+# Load .env if present (local dev). In Docker/Render, env vars come from the platform.
+env_path = os.path.join(backend_dir, '.env')
+if os.path.exists(env_path):
+    with open(env_path) as f:
+        for line in f:
+            if line.strip() and not line.startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ.setdefault(key, value)
 
-# Test imports
 try:
     from app.main import app
     from app.database import settings
@@ -27,11 +28,8 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-# Run uvicorn in the same process
 import uvicorn
-print("[INFO] Starting uvicorn server on port 8002...")
-uvicorn.run(
-    app,
-    host="127.0.0.1",
-    port=8002
-)
+port = int(os.environ.get("PORT", 8002))
+host = os.environ.get("HOST", "127.0.0.1" if settings.environment == "development" else "0.0.0.0")
+print(f"[INFO] Starting uvicorn server on {host}:{port}...")
+uvicorn.run(app, host=host, port=port)

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: subadash-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: subadash-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:////var/data/subadash.db
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL_ANALYZE
+        value: claude-haiku-4-5-20251001
+      - key: ANTHROPIC_MODEL_CHAT
+        value: claude-haiku-4-5-20251001
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: ANALYZER_PROVIDER
+        value: claude
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: ENVIRONMENT
+        value: production

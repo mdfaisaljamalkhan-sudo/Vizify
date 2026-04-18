@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import Dict, Any
 from anthropic import Anthropic
 from app.services.analyzers.base_analyzer import BaseAnalyzer
@@ -11,10 +12,12 @@ logger = logging.getLogger(__name__)
 class ClaudeAnalyzer(BaseAnalyzer):
     """Claude API analyzer using tool_use for structured JSON output"""
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str | None = None):
         super().__init__()
         self.client = Anthropic(api_key=api_key)
-        self.model = "claude-opus-4-6"
+        self.model = model or os.environ.get(
+            "ANTHROPIC_MODEL_ANALYZE", "claude-haiku-4-5-20251001"
+        )
 
     async def analyze(
         self, extracted_text: str, file_schema: Dict[str, Any]

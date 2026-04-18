@@ -21,6 +21,7 @@ class Dashboard(Base):
     # File metadata
     extracted_text = Column(String(50000))  # First 50k chars of extracted text
     file_schema = Column(JSON)
+    parquet_path = Column(String(500))  # path to parquet snapshot; used by chat sandbox (Track B)
 
     # Sharing
     is_public = Column(Boolean, default=False)
