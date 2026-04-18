@@ -1,5 +1,8 @@
 import logging
 from typing import Optional, Dict, Any
+from io import StringIO
+import pandas as pd
+
 from app.services.analyzers.base_analyzer import BaseAnalyzer
 from app.services.analyzers.claude_analyzer import ClaudeAnalyzer
 from app.services.analyzers.openai_analyzer import OpenAIAnalyzer
@@ -8,6 +11,7 @@ from app.services.analyzers.ollama_analyzer import OllamaAnalyzer
 from app.services.analyzers.groq_analyzer import GroqAnalyzer
 from app.services.analyzers.gemini_analyzer import GeminiAnalyzer
 from app.schemas.dashboard import DashboardSchema
+from app.services.period_analyzer import PeriodAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -134,3 +138,71 @@ class AnalyzerService:
     def clear_cache():
         """Clear cached analyzer instances (useful for testing)"""
         AnalyzerService._instances.clear()
+
+    @staticmethod
+    async def enrich_with_period_analytics(
+        dashboard: DashboardSchema, extracted_text: str
+    ) -> DashboardSchema:
+        """
+        Enrich a dashboard with period-over-period metrics by:
+        1. Detecting date columns in extracted_text
+        2. Computing MoM/QoQ/YoY deltas for numeric columns
+        3. Updating KPI trend/delta fields with period metrics
+        4. Generating narrative for each KPI
+        """
+        try:
+            # Parse extracted_text as CSV to detect dates and numeric columns
+            df = pd.read_csv(StringIO(extracted_text), on_error='ignore')
+        except Exception as e:
+            logger.warning(f"Failed to parse extracted_text for period analysis: {e}")
+            return dashboard
+
+        period_analyzer = PeriodAnalyzer()
+
+        # Detect date column
+        date_col = period_analyzer.detect_date_column(df)
+        if not date_col:
+            logger.debug("No date column detected for period analysis")
+            return dashboard
+
+        # Compute period metrics for all numeric columns
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        metrics_by_col = period_analyzer.compute_period_metrics(df, date_col, numeric_cols)
+
+        if not metrics_by_col:
+            return dashboard
+
+        # Update KPIs with period metrics
+        if dashboard.kpis:
+            enriched_kpis = []
+            for kpi in dashboard.kpis:
+                # Try to match KPI label to a column in metrics
+                # Simple heuristic: if column name is a substring of KPI label, use those metrics
+                matching_metrics = None
+                for col, metrics in metrics_by_col.items():
+                    if col.lower() in kpi.label.lower() or kpi.label.lower() in col.lower():
+                        matching_metrics = metrics
+                        break
+
+                if matching_metrics:
+                    kpi_dict = kpi.dict() if hasattr(kpi, 'dict') else kpi.__dict__
+                    enriched_kpi = period_analyzer.update_kpi_with_periods(
+                        kpi_dict, matching_metrics
+                    )
+                    # Generate narrative
+                    narrative = await period_analyzer.generate_kpi_narratives(
+                        kpi.label, kpi.value, matching_metrics
+                    )
+                    if narrative:
+                        enriched_kpi['narrative'] = narrative
+
+                    enriched_kpis.append(enriched_kpi)
+                else:
+                    enriched_kpis.append(kpi.dict() if hasattr(kpi, 'dict') else kpi.__dict__)
+
+            # Update dashboard with enriched KPIs
+            dashboard_dict = dashboard.dict() if hasattr(dashboard, 'dict') else dashboard.__dict__
+            dashboard_dict['kpis'] = enriched_kpis
+            return DashboardSchema(**dashboard_dict)
+
+        return dashboard

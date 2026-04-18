@@ -7,6 +7,7 @@ class KPIData(BaseModel):
     value: str
     trend: Literal["up", "down", "flat"]
     delta: str  # e.g., "+15%", "-3%"
+    narrative: Optional[str] = None  # Period-over-period narrative e.g., "up 12% QoQ"
 
 
 class ChartData(BaseModel):

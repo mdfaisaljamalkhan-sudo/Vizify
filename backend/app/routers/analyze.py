@@ -42,6 +42,12 @@ async def analyze_data(request: AnalyzeRequest) -> AnalyzeResponse:
                 file_schema=request.file_schema,
                 **_key_kwargs(),
             )
+
+            # Enrich with period analytics if dates are present
+            dashboard = await AnalyzerService.enrich_with_period_analytics(
+                dashboard, request.extracted_text
+            )
+
             return AnalyzeResponse(success=True, dashboard=dashboard)
 
         # No provider specified — use fallback chain from settings
@@ -52,6 +58,12 @@ async def analyze_data(request: AnalyzeRequest) -> AnalyzeResponse:
             file_schema=request.file_schema,
             **_key_kwargs(),
         )
+
+        # Enrich with period analytics if dates are present
+        dashboard = await AnalyzerService.enrich_with_period_analytics(
+            dashboard, request.extracted_text
+        )
+
         return AnalyzeResponse(success=True, dashboard=dashboard)
 
     except ValueError as e:
