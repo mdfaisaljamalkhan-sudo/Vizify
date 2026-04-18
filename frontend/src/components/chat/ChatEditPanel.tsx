@@ -5,7 +5,6 @@ import {
   X,
   Send,
   Loader2,
-  ChevronDown,
   RotateCcw,
   Code2,
   History,
@@ -46,7 +45,6 @@ export function ChatEditPanel({
     editHistory,
     isLoading,
     error,
-    setError,
   } = useDashboardEdit()
 
   useEffect(() => {

@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Download, Share2 } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
-import { useThemeStore } from '@/store/themeStore'
 
 interface ExportButtonProps {
   dashboardRef: React.RefObject<HTMLDivElement | null>
@@ -57,7 +56,6 @@ function cloneAndInlineStyles(element: HTMLElement): HTMLElement {
 
 export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
-  const { isDark } = useThemeStore()
 
   const exportPNG = async () => {
     if (!dashboardRef.current) return

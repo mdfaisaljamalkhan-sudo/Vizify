@@ -6,6 +6,7 @@ interface KPICardProps {
   trend: 'up' | 'down' | 'flat'
   delta: string
   narrative?: string
+  source_code?: string
 }
 
 export function KPICard({ label, value, trend, delta, narrative }: KPICardProps) {

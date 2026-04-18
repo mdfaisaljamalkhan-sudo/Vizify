@@ -8,6 +8,7 @@ class KPIData(BaseModel):
     trend: Literal["up", "down", "flat"]
     delta: str  # e.g., "+15%", "-3%"
     narrative: Optional[str] = None  # Period-over-period narrative e.g., "up 12% QoQ"
+    source_code: Optional[str] = None  # Pandas expression or formula used to compute this KPI
 
 
 class ChartData(BaseModel):
@@ -16,6 +17,7 @@ class ChartData(BaseModel):
     data: List[dict]
     x_key: str
     y_keys: List[str]
+    source_code: Optional[str] = None  # Pandas expression used to prepare data for this chart
 
 
 class DashboardSchema(BaseModel):

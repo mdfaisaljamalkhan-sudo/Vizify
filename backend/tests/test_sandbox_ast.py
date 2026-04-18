@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from backend.app.services.sandbox_executor import validate_ast, run_python
+from app.services.sandbox_executor import validate_ast, run_python
 
 
 class TestASTValidation:
