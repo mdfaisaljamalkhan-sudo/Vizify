@@ -16,6 +16,7 @@ export interface ChartData {
 }
 
 export interface DashboardData {
+  id?: string
   dashboard_type: string
   title: string
   executive_summary: string

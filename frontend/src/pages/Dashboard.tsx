@@ -1,10 +1,11 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDashboardStore } from '@/store/dashboardStore'
 import { DashboardCanvas } from '@/components/dashboard/DashboardCanvas'
 import { ExportButton } from '@/components/export/ExportButton'
 import { Header } from '@/components/Header'
 import { ChatWindow } from '@/components/chat/ChatWindow'
+import { ChatEditPanel } from '@/components/chat/ChatEditPanel'
 import { ChevronLeft } from 'lucide-react'
 
 export function Dashboard() {
@@ -12,7 +13,16 @@ export function Dashboard() {
   const dashboard = useDashboardStore((s) => s.dashboard)
   const extractedText = useDashboardStore((s) => s.extractedText)
   const clearDashboard = useDashboardStore((s) => s.clearDashboard)
+  const setDashboard = useDashboardStore((s) => s.setDashboard)
   const dashboardRef = useRef<HTMLDivElement | null>(null)
+  const [editVersion, setEditVersion] = useState(1)
+
+  const handleDashboardUpdate = (updatedData: Record<string, any>) => {
+    if (dashboard) {
+      setDashboard({ ...dashboard, ...updatedData })
+      setEditVersion((v) => v + 1)
+    }
+  }
 
   if (!dashboard) {
     return (
@@ -53,13 +63,26 @@ export function Dashboard() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-12">
-        <div ref={dashboardRef} className="space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8">
+        <div ref={dashboardRef} className="space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 relative">
+          {/* Version Badge */}
+          <div className="absolute top-4 right-4 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-xs font-medium">
+            v{editVersion}
+          </div>
           <DashboardCanvas dashboard={dashboard} />
         </div>
       </div>
 
       {/* Chat Window - positioned as fixed overlay */}
       <ChatWindow extractedText={extractedText} dashboardContext={dashboard} />
+
+      {/* Chat Edit Panel - positioned as fixed overlay */}
+      {dashboard && dashboard.id && (
+        <ChatEditPanel
+          dashboardId={dashboard.id}
+          extractedText={extractedText || ''}
+          onDashboardUpdate={handleDashboardUpdate}
+        />
+      )}
     </div>
   )
 }
