@@ -23,3 +23,6 @@ jinja2
 asyncpg
 python-dotenv
 pyarrow
+pytest
+groq
+google-generativeai

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python -m pip install python-docx pdfplumber --upgrade)",
-      "Bash(\"C:\\\\Users\\\\Faisal\\\\MyApps\\\\ActualX\\\\SubaDash\\\\backend\\\\.venv\\\\Scripts\\\\pip\" install:*)"
+      "Bash(\"C:\\\\Users\\\\Faisal\\\\MyApps\\\\ActualX\\\\SubaDash\\\\backend\\\\.venv\\\\Scripts\\\\pip\" install:*)",
+      "Bash(python -m pytest backend/tests/test_sandbox_ast.py -v)"
     ]
   }
 }
