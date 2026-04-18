@@ -2,7 +2,7 @@ import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
 
 // In dev, fall back to the Vite proxy target (port 8002).
-// In prod, set VITE_API_URL to the Render URL (e.g. https://subadash-api.onrender.com).
+// In prod, set VITE_API_URL to the Render URL (e.g. https://vizify-api.onrender.com).
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002'
 
 export const apiClient = axios.create({

@@ -12,8 +12,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'SubaDash',
-        short_name: 'SubaDash',
+        name: 'Vizify',
+        short_name: 'Vizify',
         description: 'Data-to-Dashboard Application',
         theme_color: '#1e3a5f',
         background_color: '#ffffff',

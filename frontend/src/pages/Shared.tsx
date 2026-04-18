@@ -86,7 +86,7 @@ export function Shared() {
 
         {/* Footer */}
         <div className="mt-8 text-center text-gray-600 text-sm">
-          <p>This is a publicly shared dashboard. © 2026 SubaDash</p>
+          <p>This is a publicly shared dashboard. © 2026 Vizify</p>
         </div>
       </div>
     </div>

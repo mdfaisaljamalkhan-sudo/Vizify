@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./subadash.db"
+    database_url: str = "sqlite+aiosqlite:///./vizify.db"
     jwt_secret: str = "your-secret-key-change-this"
     jwt_algorithm: str = "HS256"
 

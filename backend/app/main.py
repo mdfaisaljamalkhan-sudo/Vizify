@@ -6,7 +6,7 @@ from app.models.user import User
 from app.models.dashboard import Dashboard, DashboardShare
 
 app = FastAPI(
-    title="SubaDash API",
+    title="Vizify API",
     description="Data-to-Dashboard Backend",
     version="0.1.0"
 )
@@ -38,12 +38,12 @@ app.include_router(chat.router)
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "ok", "message": "SubaDash API is running"}
+    return {"status": "ok", "message": "Vizify API is running"}
 
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {"message": "SubaDash Data-to-Dashboard Backend", "version": "0.1.0"}
+    return {"message": "Vizify Data-to-Dashboard Backend", "version": "0.1.0"}
 
 if __name__ == "__main__":
     import os

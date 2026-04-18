@@ -1,18 +1,18 @@
-# SubaDash — Free Deployment + Interactive Chat-Driven Dashboard Editor
+# Vizify — Free Deployment + Interactive Chat-Driven Dashboard Editor
 
-> **Handoff for Claude Code in VS Code.** Drafted in Cowork after a conversation with Faisal. Two goals: (1) deploy SubaDash at **zero recurring cost** while keeping a path to real-user scale, (2) add an **interactive chat editor** where the user types a natural-language request and an LLM-generated Python script runs in a sandbox to iteratively modify the dashboard.
+> **Handoff for Claude Code in VS Code.** Drafted in Cowork after a conversation with Faisal. Two goals: (1) deploy Vizify at **zero recurring cost** while keeping a path to real-user scale, (2) add an **interactive chat editor** where the user types a natural-language request and an LLM-generated Python script runs in a sandbox to iteratively modify the dashboard.
 
 ---
 
 ## 0. Current state (from repo scan)
 
-**Backend:** FastAPI on `127.0.0.1:8002`. Entry: `backend/run_server.py`. Routers: `auth`, `upload`, `analyze`, `dashboards`, `shared`, `chat`. Services: `analyzer_service.py` (pluggable LLM factory — Claude/OpenAI/Deepseek/Ollama), `file_parser.py` (CSV, XLSX, DOCX, PDF, JSON; pandas + openpyxl + python-docx + pdfplumber). SQLAlchemy async + SQLite (`subadash.db`). Pydantic `DashboardSchema` with typed `KPIData` and `ChartData` (bar/line/pie/scatter/waterfall/quadrant). Alembic is in deps but not wired up. Stripe deps present but unused.
+**Backend:** FastAPI on `127.0.0.1:8002`. Entry: `backend/run_server.py`. Routers: `auth`, `upload`, `analyze`, `dashboards`, `shared`, `chat`. Services: `analyzer_service.py` (pluggable LLM factory — Claude/OpenAI/Deepseek/Ollama), `file_parser.py` (CSV, XLSX, DOCX, PDF, JSON; pandas + openpyxl + python-docx + pdfplumber). SQLAlchemy async + SQLite (`vizify.db`). Pydantic `DashboardSchema` with typed `KPIData` and `ChartData` (bar/line/pie/scatter/waterfall/quadrant). Alembic is in deps but not wired up. Stripe deps present but unused.
 
 **Frontend:** React 19 + Vite + TS + Tailwind. Recharts for rendering, Zustand for state, React Query for data, Framer Motion for animation. Pages: Login, Upload, Dashboard, Shared. Existing components in `components/charts/`, `components/dashboard/`, `components/chat/ChatWindow.tsx`, `components/upload/FileDropzone.tsx`. Export via html2canvas + jspdf.
 
 **Existing chat:** `POST /api/chat` already calls Anthropic (`claude-opus-4-6` hardcoded) with `extracted_text + dashboard_context`. Single-turn, read-only — it describes the dashboard but can't modify it. That's what we're upgrading.
 
-**Not yet present:** no Dockerfile, no cloud deploy config, no code-execution sandbox, no object storage, no prod-grade database story, no auth session hardening beyond JWT basics.
+**Existing:** Dockerfile, Render blueprint (render.yaml), env-driven config, SQLite + future Postgres support.
 
 ---
 
@@ -45,7 +45,7 @@ Recruiter/User
 |---|---|---|
 | Frontend | **Cloudflare Pages** (or Vercel) | Global CDN, no cold starts, scales to unlimited static traffic on free tier. |
 | Backend | **Render free web service (Docker)** | Supports FastAPI + persistent disk, can be upgraded to paid tier with no code changes. HF Spaces was considered but is really meant for ML demos, not multi-user SaaS. |
-| Database | **Supabase Postgres free** (500 MB, 2 GB bandwidth/mo) | Proper Postgres with auth + row-level security; SubaDash's existing SQLAlchemy async works with `asyncpg`. |
+| Database | **Supabase Postgres free** (500 MB, 2 GB bandwidth/mo) | Proper Postgres with auth + row-level security; Vizify's existing SQLAlchemy async works with `asyncpg`. |
 | File storage | **Cloudflare R2 free** (10 GB, no egress cost) | Raw uploads go to R2; backend only holds references. Enables stateless backend containers. |
 | LLM | **Anthropic API** (Faisal's $5 credit) | Default to Claude Haiku for chat edits, escalate to Sonnet only when structured output quality matters. |
 | Code sandbox | **Restricted subprocess + AST allowlist** (Phase 1) → **E2B free tier** (Phase 2) | Start cheap & simple; swap to E2B/Modal when real users arrive. Interface stays the same. |
@@ -71,7 +71,7 @@ Recruiter/User
 ### 2.2 Code changes
 
 - **`backend/app/main.py`** — tighten CORS: read `FRONTEND_ORIGIN` from env, allow only that origin (keep a localhost dev fallback). Currently permissive.
-- **`backend/app/database.py`** — switch the DB URL from hardcoded SQLite to env-driven: `DATABASE_URL=sqlite+aiosqlite:///./subadash.db` for local, `postgresql+asyncpg://…` for Supabase. Add `asyncpg` to requirements.
+- **`backend/app/database.py`** — switch the DB URL from hardcoded SQLite to env-driven: `DATABASE_URL=sqlite+aiosqlite:///./vizify.db` for local, `postgresql+asyncpg://…` for Supabase. Add `asyncpg` to requirements.
 - **`backend/app/routers/upload.py`** — add S3-compatible upload path using `boto3` pointed at Cloudflare R2 (feature-flagged; local dev keeps filesystem writes). Store only the R2 key in DB, not the bytes.
 - **`backend/run_server.py`** — honor `PORT` env var (Render injects this), fallback to 8002 for local.
 - **`backend/app/services/analyzer_service.py`** — un-hardcode `claude-opus-4-6`. Read `ANTHROPIC_MODEL_ANALYZE` (default Haiku) and `ANTHROPIC_MODEL_CHAT` (default Haiku) from env. Cost control for the $5 budget.
@@ -81,12 +81,12 @@ Recruiter/User
 
 ```
 # Backend
-DATABASE_URL=                     # sqlite+aiosqlite:///./subadash.db OR postgresql+asyncpg://...
+DATABASE_URL=                     # sqlite+aiosqlite:///./vizify.db OR postgresql+asyncpg://...
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL_ANALYZE=claude-haiku-4-5-20251001
 ANTHROPIC_MODEL_CHAT=claude-haiku-4-5-20251001
 JWT_SECRET=
-FRONTEND_ORIGIN=https://subadash.pages.dev
+FRONTEND_ORIGIN=https://vizify.pages.dev
 MAX_UPLOAD_MB=25
 # R2 / S3 (Phase 2, optional in Phase 1)
 R2_ACCOUNT_ID=
@@ -99,7 +99,7 @@ SANDBOX_TIMEOUT_SECONDS=10
 SANDBOX_MEMORY_MB=256
 
 # Frontend
-VITE_API_BASE_URL=https://subadash-api.onrender.com
+VITE_API_BASE_URL=https://vizify-api.onrender.com
 ```
 
 ### 2.4 Deployment sequence
@@ -413,7 +413,7 @@ Every `KPIData` and `ChartData` gets an optional `source_code: str | None` field
 
 `POST /api/dashboards/:id/export/pptx` generates a `.pptx` where each KPI group / chart becomes a slide, with auto-generated speaker notes from the insights. Charts are rendered server-side to PNG (matplotlib from the stored data; keeps frontend out of export path). Slide master matches the brand.
 
-**Create:** `backend/app/services/pptx_exporter.py`, `backend/app/templates/subadash_slide_master.pptx`, route in `dashboards.py`.
+**Create:** `backend/app/services/pptx_exporter.py`, `backend/app/templates/vizify_slide_master.pptx`, route in `dashboards.py`.
 **Modify:** `ExportButton.tsx` (add PowerPoint option).
 **Deps:** `python-pptx`, `matplotlib` (or `kaleido` if we move to Plotly server-side in Phase 2).
 

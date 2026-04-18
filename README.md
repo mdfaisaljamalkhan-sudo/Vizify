@@ -1,4 +1,4 @@
-# SubaDash: Data-to-Dashboard Application
+# Vizify: Data-to-Dashboard Application
 
 A full-stack MBA business dashboard generator that converts Excel, Word, CSV, PDF, and JSON files into interactive, visually stunning dashboards powered by Claude AI.
 
@@ -81,7 +81,7 @@ npm run dev
 ## File Structure
 
 ```
-SubaDash/
+Vizify/
 ├── frontend/           # React PWA application
 ├── backend/            # Python FastAPI backend
 │   ├── app/
@@ -103,7 +103,7 @@ SubaDash/
 Create a `.env` file in the root:
 
 ```
-DATABASE_URL=sqlite+aiosqlite:///./subadash.db
+DATABASE_URL=sqlite+aiosqlite:///./vizify.db
 JWT_SECRET=your-secret-key-change-this
 ANTHROPIC_API_KEY=sk-ant-...
 STRIPE_SECRET_KEY=sk_test_...
@@ -160,7 +160,7 @@ Try in browser console:
 
 ```javascript
 fetch('/api/health').then(r => r.json()).then(console.log)
-// Should return: { status: "ok", message: "SubaDash API is running" }
+// Should return: { status: "ok", message: "Vizify API is running" }
 ```
 
 ---
