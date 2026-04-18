@@ -7,14 +7,11 @@ openai
 python-jose[cryptography]
 passlib[bcrypt]>=1.7.4
 python-multipart
-stripe
 aiosqlite
 sqlalchemy[asyncio]
-alembic
 pydantic-settings
 pydantic[email]
 chardet
-weasyprint
 pandas
 openpyxl
 numpy
@@ -23,6 +20,5 @@ jinja2
 asyncpg
 python-dotenv
 pyarrow
-pytest
 groq
 google-generativeai
