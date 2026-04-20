@@ -5,6 +5,8 @@ export interface KPI {
   value: string
   trend: 'up' | 'down' | 'flat'
   delta: string
+  narrative?: string
+  source_code?: string
 }
 
 export interface ChartData {
@@ -13,6 +15,7 @@ export interface ChartData {
   data: Record<string, any>[]
   x_key: string
   y_keys: string[]
+  source_code?: string
 }
 
 export interface DashboardData {

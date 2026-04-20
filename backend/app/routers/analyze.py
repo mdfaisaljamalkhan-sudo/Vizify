@@ -30,31 +30,31 @@ async def analyze_data(request: AnalyzeRequest) -> AnalyzeResponse:
     (ANTHROPIC → GROQ → GEMINI) so analysis succeeds even if credits run out.
     """
     try:
+        # Inject template hint into extracted_text prefix if provided
+        extracted_text = request.extracted_text
+        if request.template:
+            extracted_text = f"[DASHBOARD_TYPE_HINT: {request.template}]\n{extracted_text}"
+
         if request.provider:
-            # Explicit provider — single attempt, no fallback
             if request.provider not in ALL_PROVIDERS:
                 raise ValueError(
                     f"Invalid provider: {request.provider}. Must be one of: {', '.join(ALL_PROVIDERS)}"
                 )
             dashboard = await AnalyzerService.analyze(
                 provider=request.provider,
-                extracted_text=request.extracted_text,
+                extracted_text=extracted_text,
                 file_schema=request.file_schema,
                 **_key_kwargs(),
             )
-
-            # Enrich with period analytics if dates are present
             dashboard = await AnalyzerService.enrich_with_period_analytics(
                 dashboard, request.extracted_text
             )
-
             return AnalyzeResponse(success=True, dashboard=dashboard)
 
-        # No provider specified — use fallback chain from settings
         chain = [p.strip() for p in settings.llm_fallback_chain.split(",") if p.strip()]
         dashboard, used = await AnalyzerService.analyze_with_fallback(
             chain=chain,
-            extracted_text=request.extracted_text,
+            extracted_text=extracted_text,
             file_schema=request.file_schema,
             **_key_kwargs(),
         )

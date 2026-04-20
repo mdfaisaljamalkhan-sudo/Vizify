@@ -6,8 +6,9 @@ import secrets
 import json
 import uuid
 
-from app.database import get_db
+from app.database import get_db, settings
 from app.models import Dashboard
+from app.services.brief_generator import generate_executive_brief
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardUpdate,
@@ -187,6 +188,28 @@ async def delete_dashboard(
     await db.commit()
 
     return {"status": "deleted"}
+
+
+@router.post("/{dashboard_id}/brief")
+async def get_executive_brief(
+    dashboard_id: str,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate an executive brief for a dashboard using LLM"""
+    result = await db.execute(
+        select(Dashboard).where(
+            (Dashboard.id == dashboard_id) & (Dashboard.user_id == user_id)
+        )
+    )
+    dashboard = result.scalars().first()
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    try:
+        brief = await generate_executive_brief(dashboard.dashboard_data, settings)
+        return brief
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Brief generation failed: {str(e)}")
 
 
 @router.post("/{dashboard_id}/share", response_model=ShareLinkResponse)

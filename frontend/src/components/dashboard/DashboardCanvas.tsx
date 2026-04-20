@@ -2,6 +2,7 @@ import type { DashboardData } from '@/store/dashboardStore'
 import { KPICard } from './KPICard'
 import { ChartCard } from './ChartCard'
 import { InsightsPanel } from './InsightsPanel'
+import { ActiveFiltersBar } from './ActiveFiltersBar'
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -56,10 +57,11 @@ export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
       {/* Charts */}
       {dashboard.charts && dashboard.charts.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Analytics</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Analytics</h2>
+          <ActiveFiltersBar />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {dashboard.charts.map((chart, i) => (
-              <ChartCard key={i} title={chart.title}>
+              <ChartCard key={i} title={chart.title} source_code={chart.source_code}>
                 {renderChart(chart)}
               </ChartCard>
             ))}

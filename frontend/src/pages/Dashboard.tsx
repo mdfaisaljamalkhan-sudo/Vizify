@@ -7,6 +7,7 @@ import { ExportButton } from '@/components/export/ExportButton'
 import { Header } from '@/components/Header'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ChatEditPanel } from '@/components/chat/ChatEditPanel'
+import { BriefButton } from '@/components/dashboard/BriefButton'
 import { ChevronLeft } from 'lucide-react'
 
 export function Dashboard() {
@@ -76,7 +77,10 @@ export function Dashboard() {
             <ChevronLeft className="w-5 h-5" />
             Back
           </button>
-          <ExportButton dashboardRef={dashboardRef} fileName={dashboard.title} />
+          <div className="flex items-center gap-2">
+            {dashboard.id && <BriefButton dashboardId={dashboard.id} />}
+            <ExportButton dashboardRef={dashboardRef} fileName={dashboard.title} />
+          </div>
         </div>
       </div>
 

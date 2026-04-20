@@ -40,7 +40,8 @@ class DashboardSchema(BaseModel):
 class AnalyzeRequest(BaseModel):
     extracted_text: str
     file_schema: dict
-    provider: Optional[str] = None  # Optional override, defaults to .env setting
+    provider: Optional[str] = None
+    template: Optional[str] = None  # Force a specific dashboard_type
 
 
 class AnalyzeResponse(BaseModel):

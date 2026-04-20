@@ -58,14 +58,12 @@ export const uploadFile = async (file: File, provider?: string) => {
 export const analyzeData = async (
   extracted_text: string,
   file_schema: Record<string, any>,
+  template?: string,
   provider?: string
 ) => {
-  const payload: any = {
-    extracted_text,
-    file_schema,
-  }
+  const payload: any = { extracted_text, file_schema }
+  if (template) payload.template = template
   if (provider) payload.provider = provider
-
   return apiClient.post('/api/analyze', payload)
 }
 

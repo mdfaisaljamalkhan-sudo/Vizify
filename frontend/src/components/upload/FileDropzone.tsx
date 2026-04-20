@@ -4,6 +4,7 @@ import { Upload, AlertCircle } from 'lucide-react'
 import { uploadFile, analyzeData, apiClient } from '@/api/client'
 import { useDashboardStore } from '@/store/dashboardStore'
 import { useNavigate } from 'react-router-dom'
+import { TemplatePicker } from './TemplatePicker'
 
 const ALLOWED_TYPES = ['.csv', '.xlsx', '.xls', '.docx', '.pdf', '.json']
 const MAX_SIZE = 25 * 1024 * 1024 // 25MB
@@ -12,6 +13,7 @@ export function FileDropzone() {
   const navigate = useNavigate()
   const { setIsLoading, setError, setDashboard, setExtractedText } = useDashboardStore()
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [template, setTemplate] = useState('general')
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -42,8 +44,8 @@ export function FileDropzone() {
 
         setUploadProgress(60)
 
-        // Analyze
-        const analyzeResponse = await analyzeData(extracted_text, file_schema)
+        // Analyze with selected template
+        const analyzeResponse = await analyzeData(extracted_text, file_schema, template !== 'general' ? template : undefined, undefined)
         setUploadProgress(75)
 
         // Save dashboard to backend to get a persistent ID
@@ -93,6 +95,7 @@ export function FileDropzone() {
 
   return (
     <div className="w-full max-w-md mx-auto">
+      <TemplatePicker selected={template} onChange={setTemplate} />
       <div
         {...getRootProps()}
         className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${

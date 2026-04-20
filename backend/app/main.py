@@ -5,6 +5,7 @@ from app.routers import upload, analyze, dashboards, shared, auth, chat, quality
 from app.models.user import User
 from app.models.dashboard import Dashboard, DashboardShare
 from app.models.dashboard_version import DashboardVersion
+from app.models.dashboard_comment import DashboardComment
 
 app = FastAPI(
     title="Vizify API",
