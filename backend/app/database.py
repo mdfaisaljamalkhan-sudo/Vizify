@@ -44,11 +44,13 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# SQLAlchemy
+# SQLAlchemy — add SSL for Postgres (required by Supabase)
+_connect_args = {"ssl": "require"} if settings.database_url.startswith("postgresql") else {}
 engine = create_async_engine(
     settings.database_url,
     echo=settings.environment == "development",
-    future=True
+    future=True,
+    connect_args=_connect_args,
 )
 
 AsyncSessionLocal = sessionmaker(
