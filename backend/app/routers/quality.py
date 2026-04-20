@@ -30,6 +30,13 @@ async def analyze_data_quality(request: QualityAnalyzeRequest):
         df = pd.read_csv(StringIO(request.extracted_text))
         findings = DataQuality.analyze(df)
         return findings
+    except pd.errors.ParserError:
+        # Non-CSV file (Excel, PDF, Word) — return clean findings, skip check
+        return {
+            "total_rows": 0, "total_columns": 0,
+            "nulls": [], "duplicates": {"count": 0, "percentage": 0, "suggestion": "Non-CSV file, quality check skipped"},
+            "outliers": [], "type_issues": [], "suspicious_values": []
+        }
     except Exception as e:
         logger.error(f"Data quality analysis failed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to analyze data: {str(e)}")

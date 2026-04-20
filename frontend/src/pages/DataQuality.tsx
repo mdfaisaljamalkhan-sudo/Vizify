@@ -36,6 +36,7 @@ export function DataQuality() {
     coerce_types: false,
   })
   const [applying, setApplying] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Load quality analysis
   useEffect(() => {
@@ -50,7 +51,9 @@ export function DataQuality() {
           extracted_text: extractedText,
         })
         setFindings(response.data)
-      } catch (err) {
+      } catch (err: any) {
+        const msg = err.response?.data?.detail || err.message || 'Quality analysis failed'
+        setError(msg)
         console.error('Quality analysis failed:', err)
       } finally {
         setLoading(false)
@@ -112,6 +115,14 @@ export function DataQuality() {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-4 mb-4">
+            <p className="text-red-800 dark:text-red-200 text-sm font-medium">Error: {error}</p>
+            <button onClick={() => navigate('/dashboard')} className="mt-2 text-sm text-red-600 underline">
+              Skip to dashboard anyway
+            </button>
+          </div>
+        )}
         {findings && (
           <div className="space-y-6">
             {/* Summary */}
