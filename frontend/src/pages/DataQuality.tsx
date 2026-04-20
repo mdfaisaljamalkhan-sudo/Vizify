@@ -83,7 +83,7 @@ export function DataQuality() {
   }
 
   const handleSkip = () => {
-    navigate('/upload', { replace: true })
+    navigate('/dashboard', { replace: true })
   }
 
   if (loading) {
