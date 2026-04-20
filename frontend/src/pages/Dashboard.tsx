@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDashboardStore } from '@/store/dashboardStore'
+import { apiClient } from '@/api/client'
 import { DashboardCanvas } from '@/components/dashboard/DashboardCanvas'
 import { ExportButton } from '@/components/export/ExportButton'
 import { Header } from '@/components/Header'
@@ -16,6 +17,24 @@ export function Dashboard() {
   const setDashboard = useDashboardStore((s) => s.setDashboard)
   const dashboardRef = useRef<HTMLDivElement | null>(null)
   const [editVersion, setEditVersion] = useState(1)
+
+  // If store is empty (e.g. page refresh), load most recent dashboard from backend
+  useEffect(() => {
+    if (!dashboard) {
+      apiClient.get('/api/dashboards?limit=1')
+        .then(res => {
+          if (res.data?.length > 0) {
+            return apiClient.get(`/api/dashboards/${res.data[0].id}`)
+          }
+        })
+        .then(res => {
+          if (res?.data) {
+            setDashboard({ ...res.data.dashboard_data, id: res.data.id })
+          }
+        })
+        .catch(() => {})
+    }
+  }, [])
 
   const handleDashboardUpdate = (updatedData: Record<string, any>) => {
     if (dashboard) {

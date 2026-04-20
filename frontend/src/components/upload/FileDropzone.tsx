@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload, AlertCircle } from 'lucide-react'
-import { uploadFile, analyzeData } from '@/api/client'
+import { uploadFile, analyzeData, apiClient } from '@/api/client'
 import { useDashboardStore } from '@/store/dashboardStore'
 import { useNavigate } from 'react-router-dom'
 
@@ -44,10 +44,21 @@ export function FileDropzone() {
 
         // Analyze
         const analyzeResponse = await analyzeData(extracted_text, file_schema)
-        setUploadProgress(90)
+        setUploadProgress(75)
 
-        // Navigate to data quality check
-        setDashboard(analyzeResponse.data.dashboard)
+        // Save dashboard to backend to get a persistent ID
+        const saveResponse = await apiClient.post('/api/dashboards', {
+          title: analyzeResponse.data.dashboard.title,
+          file_name: file.name,
+          file_type: ext.replace('.', ''),
+          file_schema: file_schema,
+          extracted_text: extracted_text,
+          dashboard_data: analyzeResponse.data.dashboard,
+        })
+        setUploadProgress(95)
+
+        // Store dashboard with its backend ID
+        setDashboard({ ...analyzeResponse.data.dashboard, id: saveResponse.data.id })
         setUploadProgress(100)
 
         setTimeout(() => {
@@ -61,7 +72,7 @@ export function FileDropzone() {
         setUploadProgress(0)
       }
     },
-    [navigate, setIsLoading, setError, setDashboard]
+    [navigate, setIsLoading, setError, setDashboard, setExtractedText]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
