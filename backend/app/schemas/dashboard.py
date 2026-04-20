@@ -20,6 +20,19 @@ class ChartData(BaseModel):
     source_code: Optional[str] = None  # Pandas expression used to prepare data for this chart
 
 
+class ScenarioKPI(BaseModel):
+    label: str
+    base_value: str
+    scenario_value: str
+    delta_pct: float
+
+
+class ScenarioData(BaseModel):
+    name: str
+    description: str
+    kpi_deltas: List[ScenarioKPI] = []
+
+
 class DashboardSchema(BaseModel):
     dashboard_type: Literal[
         "pl_statement",
@@ -35,6 +48,7 @@ class DashboardSchema(BaseModel):
     charts: List[ChartData] = []
     insights: List[str] = []
     recommendations: List[str] = []
+    scenarios: List[ScenarioData] = []
 
 
 class AnalyzeRequest(BaseModel):

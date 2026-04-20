@@ -6,9 +6,11 @@ import secrets
 import json
 import uuid
 
+from fastapi.responses import Response
 from app.database import get_db, settings
 from app.models import Dashboard
 from app.services.brief_generator import generate_executive_brief
+from app.services.pptx_exporter import generate_pptx
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardUpdate,
@@ -188,6 +190,33 @@ async def delete_dashboard(
     await db.commit()
 
     return {"status": "deleted"}
+
+
+@router.get("/{dashboard_id}/export/pptx")
+async def export_pptx(
+    dashboard_id: str,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export dashboard as PowerPoint presentation"""
+    result = await db.execute(
+        select(Dashboard).where(
+            (Dashboard.id == dashboard_id) & (Dashboard.user_id == user_id)
+        )
+    )
+    dashboard = result.scalars().first()
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+    try:
+        pptx_bytes = generate_pptx(dashboard.dashboard_data)
+        filename = f"{dashboard.title.replace(' ', '_')}.pptx"
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 
 @router.post("/{dashboard_id}/brief")

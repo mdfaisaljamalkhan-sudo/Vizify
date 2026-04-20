@@ -1,8 +1,10 @@
-import type { DashboardData } from '@/store/dashboardStore'
+import { useState } from 'react'
+import type { DashboardData, Scenario } from '@/store/dashboardStore'
 import { KPICard } from './KPICard'
 import { ChartCard } from './ChartCard'
 import { InsightsPanel } from './InsightsPanel'
 import { ActiveFiltersBar } from './ActiveFiltersBar'
+import { TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
 import { BarChart } from '@/components/charts/BarChart'
 import { LineChart } from '@/components/charts/LineChart'
 import { PieChart } from '@/components/charts/PieChart'
@@ -12,6 +14,46 @@ import { PLWaterfall } from '@/components/charts/PLWaterfall'
 
 interface DashboardCanvasProps {
   dashboard: DashboardData
+}
+
+function ScenarioPanel({ scenarios }: { scenarios: Scenario[] }) {
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  if (!scenarios?.length) return null
+  const s = scenarios[active]
+  return (
+    <div className="border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-2 w-full text-left font-semibold text-amber-800 dark:text-amber-200">
+        <TrendingUp className="w-4 h-4" />
+        What-If Scenarios ({scenarios.length})
+        {open ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+      </button>
+      {open && (
+        <div className="mt-3">
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {scenarios.map((sc, i) => (
+              <button key={i} onClick={() => setActive(i)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${i === active ? 'bg-amber-600 text-white' : 'bg-amber-100 dark:bg-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-200'}`}>
+                {sc.name}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">{s.description}</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {s.kpi_deltas.map((k, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 rounded p-2 text-center border border-amber-200 dark:border-amber-700">
+                <p className="text-xs text-gray-500 mb-1">{k.label}</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{k.base_value} → {k.scenario_value}</p>
+                <p className={`text-xs font-semibold ${k.delta_pct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {k.delta_pct >= 0 ? '▲' : '▼'} {Math.abs(k.delta_pct).toFixed(1)}%
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
@@ -66,6 +108,13 @@ export function DashboardCanvas({ dashboard }: DashboardCanvasProps) {
               </ChartCard>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* What-If Scenarios */}
+      {dashboard.scenarios && dashboard.scenarios.length > 0 && (
+        <section>
+          <ScenarioPanel scenarios={dashboard.scenarios} />
         </section>
       )}
 

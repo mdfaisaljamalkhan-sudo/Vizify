@@ -78,6 +78,23 @@ class ChatEditorService:
                         error="Unable to load dashboard data for editing",
                     )
 
+            # What-if scenario path — don't run sandbox, just append scenario
+            if self._is_what_if(message):
+                scenario = await self._generate_scenario(message, dashboard_data)
+                if scenario:
+                    scenarios = dashboard_data.get("scenarios", [])
+                    scenarios = [s for s in scenarios if s.get("name") != scenario.get("name")]
+                    scenarios.append(scenario)
+                    dashboard_data = {**dashboard_data, "scenarios": scenarios}
+                    dashboard.dashboard_data = dashboard_data
+                    dashboard.updated_at = datetime.utcnow()
+                    await db.commit()
+                    return ChatEditResponse(
+                        status="success",
+                        dashboard_data=dashboard_data,
+                        edit_description=f"What-if: {scenario.get('name', message)}",
+                    )
+
             # Generate edit code via LLM
             generated_code = await self._generate_edit_code(
                 message=message,
@@ -148,6 +165,39 @@ class ChatEditorService:
                 status="error",
                 error=f"Edit failed: {str(e)}",
             )
+
+    def _is_what_if(self, message: str) -> bool:
+        triggers = ["what if", "what happens if", "scenario", "if we", "if revenue", "if cost", "suppose", "assuming"]
+        return any(t in message.lower() for t in triggers)
+
+    async def _generate_scenario(self, message: str, dashboard_data: dict) -> Optional[dict]:
+        """Generate a what-if scenario object."""
+        kpis = dashboard_data.get("kpis", [])
+        prompt = f"""The user asks: "{message}"
+Current KPIs: {json.dumps([{{'label': k['label'], 'value': k['value']}} for k in kpis])}
+
+Return ONLY a JSON object:
+{{
+  "name": "Scenario name",
+  "description": "What changes",
+  "kpi_deltas": [
+    {{"label": "KPI Label", "base_value": "current", "scenario_value": "new", "delta_pct": 10.0}}
+  ]
+}}"""
+        try:
+            resp = self.client.messages.create(
+                model=settings.anthropic_model_chat,
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            import re
+            text = resp.content[0].text.strip()
+            match = re.search(r'\{[\s\S]*\}', text)
+            if match:
+                return json.loads(match.group())
+        except Exception as e:
+            logger.error(f"Scenario generation failed: {e}")
+        return None
 
     async def _generate_edit_code(
         self,

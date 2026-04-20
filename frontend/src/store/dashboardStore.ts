@@ -18,6 +18,19 @@ export interface ChartData {
   source_code?: string
 }
 
+export interface ScenarioKPI {
+  label: string
+  base_value: string
+  scenario_value: string
+  delta_pct: number
+}
+
+export interface Scenario {
+  name: string
+  description: string
+  kpi_deltas: ScenarioKPI[]
+}
+
 export interface DashboardData {
   id?: string
   dashboard_type: string
@@ -27,6 +40,7 @@ export interface DashboardData {
   charts: ChartData[]
   insights: string[]
   recommendations: string[]
+  scenarios?: Scenario[]
 }
 
 interface DashboardStore {

@@ -5,67 +5,68 @@ import { uploadFile, analyzeData, apiClient } from '@/api/client'
 import { useDashboardStore } from '@/store/dashboardStore'
 import { useNavigate } from 'react-router-dom'
 import { TemplatePicker } from './TemplatePicker'
+import { JoinProposer } from './JoinProposer'
 
 const ALLOWED_TYPES = ['.csv', '.xlsx', '.xls', '.docx', '.pdf', '.json']
-const MAX_SIZE = 25 * 1024 * 1024 // 25MB
+const MAX_SIZE = 25 * 1024 * 1024
 
 export function FileDropzone() {
   const navigate = useNavigate()
   const { setIsLoading, setError, setDashboard, setExtractedText } = useDashboardStore()
   const [uploadProgress, setUploadProgress] = useState(0)
   const [template, setTemplate] = useState('general')
+  const [pendingJoin, setPendingJoin] = useState<{ fileNames: string[]; texts: string[]; schemas: any[] } | null>(null)
+
+  const runAnalyzeAndSave = async (extracted_text: string, file_schema: any, fileName: string, ext: string) => {
+    setExtractedText(extracted_text)
+    setUploadProgress(60)
+    const analyzeResponse = await analyzeData(extracted_text, file_schema, template !== 'general' ? template : undefined, undefined)
+    setUploadProgress(75)
+    const saveResponse = await apiClient.post('/api/dashboards', {
+      title: analyzeResponse.data.dashboard.title,
+      file_name: fileName,
+      file_type: ext.replace('.', ''),
+      file_schema,
+      extracted_text,
+      dashboard_data: analyzeResponse.data.dashboard,
+    })
+    setUploadProgress(95)
+    setDashboard({ ...analyzeResponse.data.dashboard, id: saveResponse.data.id })
+    setUploadProgress(100)
+    setTimeout(() => navigate('/quality'), 500)
+  }
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      const file = acceptedFiles[0]
-      if (!file) return
+      if (acceptedFiles.length === 0) return
 
-      // Validate file type
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-      if (!ALLOWED_TYPES.includes(ext)) {
-        setError(`File type ${ext} not supported. Allowed: ${ALLOWED_TYPES.join(', ')}`)
-        return
-      }
-
-      if (file.size > MAX_SIZE) {
-        setError(`File size exceeds 25MB limit`)
-        return
+      // Validate all files
+      for (const f of acceptedFiles) {
+        const ext = '.' + f.name.split('.').pop()?.toLowerCase()
+        if (!ALLOWED_TYPES.includes(ext)) { setError(`File type ${ext} not supported`); return }
+        if (f.size > MAX_SIZE) { setError('File size exceeds 25MB'); return }
       }
 
       try {
         setIsLoading(true)
         setError(null)
-        setUploadProgress(30)
+        setUploadProgress(20)
 
-        // Upload file
-        const uploadResponse = await uploadFile(file)
-        const { extracted_text, file_schema } = uploadResponse.data
-        setExtractedText(extracted_text)
-
-        setUploadProgress(60)
-
-        // Analyze with selected template
-        const analyzeResponse = await analyzeData(extracted_text, file_schema, template !== 'general' ? template : undefined, undefined)
-        setUploadProgress(75)
-
-        // Save dashboard to backend to get a persistent ID
-        const saveResponse = await apiClient.post('/api/dashboards', {
-          title: analyzeResponse.data.dashboard.title,
-          file_name: file.name,
-          file_type: ext.replace('.', ''),
-          file_schema: file_schema,
-          extracted_text: extracted_text,
-          dashboard_data: analyzeResponse.data.dashboard,
-        })
-        setUploadProgress(95)
-
-        // Store dashboard with its backend ID
-        setDashboard({ ...analyzeResponse.data.dashboard, id: saveResponse.data.id })
-        setUploadProgress(100)
-
-        setTimeout(() => {
-          navigate('/quality')
-        }, 500)
+        if (acceptedFiles.length === 1) {
+          const file = acceptedFiles[0]
+          const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+          const uploadResponse = await uploadFile(file)
+          const { extracted_text, file_schema } = uploadResponse.data
+          await runAnalyzeAndSave(extracted_text, file_schema, file.name, ext)
+        } else {
+          // Multi-file: upload all, then show join proposer
+          const results = await Promise.all(acceptedFiles.map(f => uploadFile(f)))
+          const texts = results.map(r => r.data.extracted_text)
+          const schemas = results.map(r => r.data.file_schema)
+          setUploadProgress(50)
+          setIsLoading(false)
+          setPendingJoin({ fileNames: acceptedFiles.map(f => f.name), texts, schemas })
+        }
       } catch (err: any) {
         const message = err.response?.data?.detail || err.message || 'Upload failed'
         setError(message)
@@ -74,12 +75,42 @@ export function FileDropzone() {
         setUploadProgress(0)
       }
     },
-    [navigate, setIsLoading, setError, setDashboard, setExtractedText]
+    [navigate, setIsLoading, setError, setDashboard, setExtractedText, template]
   )
+
+  const handleJoinComplete = async (mergedText: string) => {
+    if (!pendingJoin) return
+    setPendingJoin(null)
+    try {
+      setIsLoading(true)
+      setError(null)
+      await runAnalyzeAndSave(mergedText, {}, pendingJoin.fileNames.join('+'), '.csv')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Analysis failed')
+      setIsLoading(false)
+    }
+  }
+
+  const handleJoinSkip = async () => {
+    if (!pendingJoin) return
+    const text = pendingJoin.texts[0]
+    const schema = pendingJoin.schemas[0]
+    const name = pendingJoin.fileNames[0]
+    const ext = '.' + name.split('.').pop()?.toLowerCase()
+    setPendingJoin(null)
+    try {
+      setIsLoading(true)
+      setError(null)
+      await runAnalyzeAndSave(text, schema, name, ext)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || 'Analysis failed')
+      setIsLoading(false)
+    }
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    maxFiles: 1,
+    maxFiles: 5,
     accept: {
       'text/csv': ['.csv'],
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
@@ -93,6 +124,17 @@ export function FileDropzone() {
   const isLoading = useDashboardStore((s) => s.isLoading)
   const error = useDashboardStore((s) => s.error)
 
+  if (pendingJoin) {
+    return (
+      <JoinProposer
+        fileNames={pendingJoin.fileNames}
+        extractedTexts={pendingJoin.texts}
+        onJoinComplete={handleJoinComplete}
+        onSkip={handleJoinSkip}
+      />
+    )
+  }
+
   return (
     <div className="w-full max-w-md mx-auto">
       <TemplatePicker selected={template} onChange={setTemplate} />
@@ -105,14 +147,12 @@ export function FileDropzone() {
         <input {...getInputProps()} disabled={isLoading} />
         <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
         {isDragActive ? (
-          <p className="text-blue-600 font-semibold">Drop file here...</p>
+          <p className="text-blue-600 font-semibold">Drop files here...</p>
         ) : (
           <>
-            <p className="text-gray-700 font-semibold mb-2">Drag and drop your file</p>
-            <p className="text-sm text-gray-500">or click to select</p>
-            <p className="text-xs text-gray-400 mt-4">
-              CSV, Excel, Word, PDF, JSON • Max 25MB
-            </p>
+            <p className="text-gray-700 font-semibold mb-2">Drag and drop your file(s)</p>
+            <p className="text-sm text-gray-500">or click to select • up to 5 files for joining</p>
+            <p className="text-xs text-gray-400 mt-4">CSV, Excel, Word, PDF, JSON • Max 25MB each</p>
           </>
         )}
       </div>
@@ -128,10 +168,7 @@ export function FileDropzone() {
         <div className="mt-4 space-y-2">
           <p className="text-sm text-gray-600">Processing...</p>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            ></div>
+            <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
           </div>
         </div>
       )}

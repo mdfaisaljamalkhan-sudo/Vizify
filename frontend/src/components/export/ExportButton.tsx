@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Download, Share2 } from 'lucide-react'
+import { Download, Share2, Presentation } from 'lucide-react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { apiClient } from '@/api/client'
+import { useDashboardStore } from '@/store/dashboardStore'
 
 interface ExportButtonProps {
   dashboardRef: React.RefObject<HTMLDivElement | null>
@@ -56,6 +58,27 @@ function cloneAndInlineStyles(element: HTMLElement): HTMLElement {
 
 export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
+  const dashboard = useDashboardStore((s) => s.dashboard)
+
+  const exportPPTX = async () => {
+    if (!dashboard?.id) return
+    setIsExporting(true)
+    try {
+      const res = await apiClient.get(`/api/dashboards/${dashboard.id}/export/pptx`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${fileName}.pptx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('PPTX export failed', e)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const exportPNG = async () => {
     if (!dashboardRef.current) return
@@ -200,6 +223,16 @@ export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
         <Download className="w-4 h-4" />
         PDF
       </button>
+      {dashboard?.id && (
+        <button
+          onClick={exportPPTX}
+          disabled={isExporting}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
+        >
+          <Presentation className="w-4 h-4" />
+          PPTX
+        </button>
+      )}
       <button
         disabled
         className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-600 rounded-lg disabled:opacity-50 cursor-not-allowed"
