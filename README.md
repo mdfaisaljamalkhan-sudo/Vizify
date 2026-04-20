@@ -1,3 +1,13 @@
+---
+title: Vizify API
+emoji: 📊
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Vizify: Data-to-Dashboard Application
 
 A full-stack MBA business dashboard generator that converts Excel, Word, CSV, PDF, and JSON files into interactive, visually stunning dashboards powered by Claude AI.
