@@ -136,7 +136,7 @@ class OpenAIAnalyzer(BaseAnalyzer):
         messages = [
             {
                 "role": "user",
-                "content": f"""Analyze the following extracted data and generate a business dashboard.
+                "content": f"""You are a senior analyst briefing the CEO. Analyze this data and generate a crisp executive dashboard.
 
 File Schema:
 {json.dumps(file_schema, indent=2)}
@@ -144,7 +144,12 @@ File Schema:
 Extracted Data:
 {extracted_text}
 
-Generate an appropriate dashboard with KPIs, charts, insights, and recommendations. Be specific with data values and trends.""",
+STRICT FORMAT RULES (C-Suite audience):
+- KPIs: 4–6 metrics with exact values and trend direction from the data
+- Charts: 2–4 charts that best visualise the data
+- insights: EXACTLY 4 items. Each is ONE sentence, max 20 words, leading with a number or % from the data.
+- recommendations: EXACTLY 4 items. Each is ONE action sentence starting with a verb, max 20 words.
+- executive_summary: 2 sentences max, numbers-first, no fluff""",
             }
         ]
 

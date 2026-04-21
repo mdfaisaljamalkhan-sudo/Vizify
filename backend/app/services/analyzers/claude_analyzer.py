@@ -136,7 +136,7 @@ class ClaudeAnalyzer(BaseAnalyzer):
         messages = [
             {
                 "role": "user",
-                "content": f"""Analyze the following extracted data and generate a comprehensive business dashboard.
+                "content": f"""You are a senior analyst briefing the CEO. Analyze this data and generate a crisp executive dashboard.
 
 File Schema:
 {json.dumps(file_schema, indent=2)}
@@ -144,20 +144,19 @@ File Schema:
 Extracted Data:
 {extracted_text}
 
-Generate an appropriate business dashboard. Requirements:
-- Include 3–6 KPIs with real values, units, and trends from the data
-- Generate 2–4 charts using types that best visualize the data (choose from bar, line, pie, scatter, waterfall, quadrant)
-- Provide at least 4 specific, data-driven Key Insights (each substantiated with numbers or percentages from the data)
-- Provide at least 4 actionable Recommendations (based on trends and patterns you identify)
-- Be specific: use actual data values, percentages, and comparative language
-- For each insight/recommendation, reference the specific metrics or data patterns that support it""",
+STRICT FORMAT RULES (C-Suite audience):
+- KPIs: 4–6 metrics with exact values and trend direction from the data
+- Charts: 2–4 charts (bar/line/pie/scatter/waterfall/quadrant) that best visualise the data
+- insights: EXACTLY 4 items. Each is ONE sentence, max 20 words, leading with a number or % from the data. Example: "Revenue grew 23% QoQ, reaching $4.2M — highest in 3 quarters."
+- recommendations: EXACTLY 4 items. Each is ONE action sentence starting with a verb, max 20 words. Example: "Increase marketing spend 15% in Q3 to capitalise on peak demand cycle."
+- executive_summary: 2 sentences max, numbers-first, no fluff""",
             }
         ]
 
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=2048,
+                max_tokens=2500,  # raised slightly to avoid truncation of insights/recommendations
                 tools=[dashboard_tool],
                 tool_choice={"type": "tool", "name": "generate_dashboard"},
                 messages=messages,
