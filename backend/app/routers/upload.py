@@ -69,16 +69,19 @@ async def upload_file(
         # Parse file
         extracted_text, schema = await FileParser.parse_file(content, file.filename)
 
-        # Save raw file temporarily for record-keeping
+        # Save raw file + parquet in background — don't block the response
         file_path = UPLOAD_DIR / file.filename
-        with open(file_path, "wb") as f:
-            f.write(content)
-        background_tasks.add_task(cleanup_file, file_path)
+        background_tasks.add_task(_write_and_cleanup, file_path, content)
 
-        # For tabular files, also save a parquet snapshot for the chat sandbox (Track B)
         parquet_path: Optional[str] = None
         if file_ext in TABULAR_EXTENSIONS:
-            parquet_path = _save_parquet(content, file.filename, file_ext)
+            # Best-effort parquet; we derive the path deterministically so we can
+            # return it immediately even though the write happens in the background.
+            import hashlib
+            stem = Path(file.filename).stem
+            key = f"{stem}_{hashlib.md5(content[:512]).hexdigest()[:8]}.parquet"
+            parquet_path = str(PARQUET_DIR / key)
+            background_tasks.add_task(_save_parquet_bg, content, file_ext, parquet_path)
 
         return UploadResponse(
             success=True,
@@ -94,6 +97,36 @@ async def upload_file(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+def _write_and_cleanup(file_path: Path, content: bytes):
+    """Write uploaded bytes then schedule removal (runs in background)."""
+    try:
+        file_path.write_bytes(content)
+        import time; time.sleep(60)  # keep for 1 min in case needed
+        if file_path.exists():
+            file_path.unlink()
+    except Exception:
+        pass
+
+
+def _save_parquet_bg(content: bytes, file_ext: str, dest: str):
+    """Background parquet conversion — failures are silent."""
+    try:
+        import pandas as pd
+        if file_ext == '.csv':
+            import chardet
+            enc = chardet.detect(content).get('encoding', 'utf-8')
+            df = pd.read_csv(io.BytesIO(content), encoding=enc)
+        elif file_ext in ('.xlsx', '.xls'):
+            df = pd.read_excel(io.BytesIO(content))
+        elif file_ext == '.json':
+            df = pd.read_json(io.BytesIO(content))
+        else:
+            return
+        df.to_parquet(dest, index=False)
+    except Exception:
+        pass
 
 
 def _save_parquet(content: bytes, filename: str, file_ext: str) -> Optional[str]:

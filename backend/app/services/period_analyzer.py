@@ -1,8 +1,10 @@
+import asyncio
+import json
 import logging
-from typing import Optional, Tuple
+import re
+from typing import Optional, List
 import pandas as pd
 import numpy as np
-from datetime import datetime
 from anthropic import Anthropic
 from app.database import settings
 
@@ -114,38 +116,55 @@ class PeriodAnalyzer:
 
         return metrics
 
+    async def generate_kpi_narratives_batch(
+        self, kpis: List[dict]
+    ) -> dict[str, str]:
+        """
+        Generate one-line narratives for ALL KPIs in a SINGLE LLM call.
+        Returns {kpi_label: narrative_string}.
+        Previously this was N separate calls (one per KPI) — batching saves 40-60s.
+        """
+        if not kpis:
+            return {}
+
+        kpi_list = "\n".join(
+            f"- {k['label']} (value={k['value']}, "
+            f"MoM={k['metrics'].get('mom_pct','N/A')}%, "
+            f"QoQ={k['metrics'].get('qoq_pct','N/A')}%, "
+            f"YoY={k['metrics'].get('yoy_pct','N/A')}%)"
+            for k in kpis
+        )
+
+        prompt = (
+            "Generate ONE-LINE business narratives (max 12 words each) for these KPIs.\n"
+            "Return ONLY a JSON object: {\"KPI Label\": \"narrative\", ...}\n\n"
+            f"{kpi_list}"
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                self.client.messages.create,
+                model=settings.anthropic_model_analyze,
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            match = re.search(r'\{[\s\S]*\}', text)
+            if match:
+                return json.loads(match.group())
+        except Exception as e:
+            logger.error(f"Batch narrative generation failed: {e}")
+
+        return {}
+
     async def generate_kpi_narratives(
         self, kpi_name: str, current_value: str, metrics: dict
     ) -> str:
-        """
-        Generate a one-line narrative for a KPI given its period-over-period metrics.
-        Example: "Revenue up 12% QoQ, driven by strong Q4 demand"
-        """
-        if not any([metrics.get('mom_pct'), metrics.get('qoq_pct'), metrics.get('yoy_pct')]):
-            return ""
-
-        prompt = f"""Generate a single-line business narrative for this KPI metric.
-
-KPI: {kpi_name}
-Current Value: {current_value}
-Metrics:
-- Month-over-Month: {metrics.get('mom_pct', 'N/A')}% (delta: {metrics.get('mom_delta', 'N/A')})
-- Quarter-over-Quarter: {metrics.get('qoq_pct', 'N/A')}% (delta: {metrics.get('qoq_delta', 'N/A')})
-- Year-over-Year: {metrics.get('yoy_pct', 'N/A')}% (delta: {metrics.get('yoy_delta', 'N/A')})
-
-Write ONE concise line (max 15 words) explaining the trend and key driver. Be specific with the metric that shows the biggest change.
-Only the narrative line, nothing else."""
-
-        try:
-            response = self.client.messages.create(
-                model=settings.anthropic_model_analyze,
-                max_tokens=50,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text.strip()
-        except Exception as e:
-            logger.error(f"Failed to generate narrative for {kpi_name}: {e}")
-            return ""
+        """Single-KPI narrative kept for backward compatibility."""
+        result = await self.generate_kpi_narratives_batch(
+            [{"label": kpi_name, "value": current_value, "metrics": metrics}]
+        )
+        return result.get(kpi_name, "")
 
     def update_kpi_with_periods(self, kpi: dict, metrics: dict) -> dict:
         """

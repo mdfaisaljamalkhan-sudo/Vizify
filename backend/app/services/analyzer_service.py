@@ -173,36 +173,44 @@ class AnalyzerService:
             return dashboard
 
         # Update KPIs with period metrics
-        if dashboard.kpis:
-            enriched_kpis = []
-            for kpi in dashboard.kpis:
-                # Try to match KPI label to a column in metrics
-                # Simple heuristic: if column name is a substring of KPI label, use those metrics
-                matching_metrics = None
-                for col, metrics in metrics_by_col.items():
-                    if col.lower() in kpi.label.lower() or kpi.label.lower() in col.lower():
-                        matching_metrics = metrics
-                        break
+        if not dashboard.kpis:
+            return dashboard
 
-                if matching_metrics:
-                    kpi_dict = kpi.dict() if hasattr(kpi, 'dict') else kpi.__dict__
-                    enriched_kpi = period_analyzer.update_kpi_with_periods(
-                        kpi_dict, matching_metrics
-                    )
-                    # Generate narrative
-                    narrative = await period_analyzer.generate_kpi_narratives(
-                        kpi.label, kpi.value, matching_metrics
-                    )
-                    if narrative:
-                        enriched_kpi['narrative'] = narrative
+        # First pass: match KPIs to columns and update trends (pure math, fast)
+        kpis_with_metrics = []
+        enriched_kpis = []
+        for kpi in dashboard.kpis:
+            matching_metrics = None
+            for col, metrics in metrics_by_col.items():
+                if col.lower() in kpi.label.lower() or kpi.label.lower() in col.lower():
+                    matching_metrics = metrics
+                    break
 
-                    enriched_kpis.append(enriched_kpi)
-                else:
-                    enriched_kpis.append(kpi.dict() if hasattr(kpi, 'dict') else kpi.__dict__)
+            kpi_dict = kpi.dict() if hasattr(kpi, 'dict') else kpi.__dict__
+            if matching_metrics:
+                enriched_kpi = period_analyzer.update_kpi_with_periods(kpi_dict, matching_metrics)
+                kpis_with_metrics.append({
+                    "label": kpi.label,
+                    "value": kpi.value,
+                    "metrics": matching_metrics,
+                    "kpi_dict": enriched_kpi,
+                })
+                enriched_kpis.append(enriched_kpi)
+            else:
+                enriched_kpis.append(kpi_dict)
 
-            # Update dashboard with enriched KPIs
-            dashboard_dict = dashboard.dict() if hasattr(dashboard, 'dict') else dashboard.__dict__
-            dashboard_dict['kpis'] = enriched_kpis
-            return DashboardSchema(**dashboard_dict)
+        # Second pass: ONE batch LLM call for all narratives (was N sequential calls)
+        if kpis_with_metrics:
+            narratives = await period_analyzer.generate_kpi_narratives_batch(kpis_with_metrics)
+            for item in kpis_with_metrics:
+                narrative = narratives.get(item["label"], "")
+                if narrative:
+                    # Find and update the matching enriched_kpi in place
+                    for ek in enriched_kpis:
+                        if ek.get("label") == item["label"]:
+                            ek["narrative"] = narrative
+                            break
 
-        return dashboard
+        dashboard_dict = dashboard.dict() if hasattr(dashboard, 'dict') else dashboard.__dict__
+        dashboard_dict['kpis'] = enriched_kpis
+        return DashboardSchema(**dashboard_dict)

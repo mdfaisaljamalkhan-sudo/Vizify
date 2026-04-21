@@ -157,7 +157,7 @@ Generate an appropriate business dashboard. Requirements:
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=2048,
                 tools=[dashboard_tool],
                 tool_choice={"type": "tool", "name": "generate_dashboard"},
                 messages=messages,

@@ -17,11 +17,15 @@ export function FileDropzone() {
   const [template, setTemplate] = useState('general')
   const [pendingJoin, setPendingJoin] = useState<{ fileNames: string[]; texts: string[]; schemas: any[] } | null>(null)
 
+  const [progressLabel, setProgressLabel] = useState('')
+
   const runAnalyzeAndSave = async (extracted_text: string, file_schema: any, fileName: string, ext: string) => {
     setExtractedText(extracted_text)
-    setUploadProgress(60)
+    setProgressLabel('Analysing with AI…')
+    setUploadProgress(40)
     const analyzeResponse = await analyzeData(extracted_text, file_schema, template !== 'general' ? template : undefined, undefined)
-    setUploadProgress(75)
+    setProgressLabel('Saving dashboard…')
+    setUploadProgress(90)
     const saveResponse = await apiClient.post('/api/dashboards', {
       title: analyzeResponse.data.dashboard.title,
       file_name: fileName,
@@ -30,10 +34,9 @@ export function FileDropzone() {
       extracted_text,
       dashboard_data: analyzeResponse.data.dashboard,
     })
-    setUploadProgress(95)
     setDashboard({ ...analyzeResponse.data.dashboard, id: saveResponse.data.id })
     setUploadProgress(100)
-    setTimeout(() => navigate('/dashboard'), 500)
+    navigate('/dashboard')
   }
 
   const onDrop = useCallback(
@@ -50,7 +53,8 @@ export function FileDropzone() {
       try {
         setIsLoading(true)
         setError(null)
-        setUploadProgress(20)
+        setProgressLabel('Uploading & parsing…')
+        setUploadProgress(15)
 
         if (acceptedFiles.length === 1) {
           const file = acceptedFiles[0]
@@ -166,7 +170,7 @@ export function FileDropzone() {
 
       {isLoading && (
         <div className="mt-4 space-y-2">
-          <p className="text-sm text-gray-600">Processing...</p>
+          <p className="text-sm text-gray-600">{progressLabel || 'Uploading & parsing…'}</p>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
           </div>

@@ -1,7 +1,9 @@
+import asyncio
 import pandas as pd
 import io
 from pathlib import Path
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any
+
 import chardet
 
 try:
@@ -16,19 +18,12 @@ try:
 except ImportError:
     HAS_PDFPLUMBER = False
 
+
 class FileParser:
-    """Router for different file type parsers"""
 
     @staticmethod
     async def parse_file(file_content: bytes, filename: str) -> Tuple[str, Dict[str, Any]]:
-        """
-        Parse uploaded file and return extracted text + schema metadata
-
-        Returns:
-            Tuple of (extracted_text, schema_metadata)
-        """
         ext = Path(filename).suffix.lower()
-
         if ext == '.csv':
             return await FileParser._parse_csv(file_content)
         elif ext in ['.xlsx', '.xls']:
@@ -42,17 +37,15 @@ class FileParser:
         else:
             raise ValueError(f"Unsupported file type: {ext}")
 
+    # ── Each parser runs the CPU-bound work in a thread so it never
+    # ── blocks the asyncio event loop. ──────────────────────────────
+
     @staticmethod
     async def _parse_csv(file_content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Parse CSV file"""
-        try:
-            # Detect encoding
+        def _run():
             detected = chardet.detect(file_content)
-            encoding = detected.get('encoding', 'utf-8')
-
-            # Read CSV with detected encoding
+            encoding = detected.get('encoding') or 'utf-8'
             df = pd.read_csv(io.BytesIO(file_content), encoding=encoding)
-
             schema = {
                 'file_type': 'csv',
                 'rows': len(df),
@@ -60,30 +53,25 @@ class FileParser:
                 'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
                 'sample': df.head(5).to_dict(orient='records'),
             }
-
-            # Convert to readable text format
-            text = f"CSV Data\n\n"
-            text += f"Rows: {len(df)}, Columns: {len(df.columns)}\n\n"
-            text += f"Columns: {', '.join(df.columns)}\n\n"
-            text += f"First 5 rows:\n{df.head().to_string()}\n\n"
-            text += f"Data types:\n{df.dtypes.to_string()}\n\n"
-            text += f"Summary statistics:\n{df.describe().to_string()}"
-
+            text = (
+                f"CSV Data\n\nRows: {len(df)}, Columns: {len(df.columns)}\n\n"
+                f"Columns: {', '.join(df.columns)}\n\n"
+                f"First 5 rows:\n{df.head().to_string()}\n\n"
+                f"Data types:\n{df.dtypes.to_string()}\n\n"
+                f"Summary statistics:\n{df.describe().to_string()}"
+            )
             return text, schema
-
+        try:
+            return await asyncio.to_thread(_run)
         except Exception as e:
-            raise ValueError(f"Failed to parse CSV: {str(e)}")
+            raise ValueError(f"Failed to parse CSV: {e}")
 
     @staticmethod
     async def _parse_excel(file_content: bytes, filename: str) -> Tuple[str, Dict[str, Any]]:
-        """Parse Excel file"""
-        try:
+        def _run():
             excel_file = pd.ExcelFile(io.BytesIO(file_content))
-
-            # For MVP, parse first sheet only
             sheet_name = excel_file.sheet_names[0]
             df = excel_file.parse(sheet_name)
-
             schema = {
                 'file_type': 'excel',
                 'sheet_name': sheet_name,
@@ -93,140 +81,96 @@ class FileParser:
                 'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
                 'sample': df.head(5).to_dict(orient='records'),
             }
-
-            # Convert to readable text format
-            text = f"Excel Data\n"
-            text += f"Sheet: {sheet_name}\n\n"
-            text += f"Rows: {len(df)}, Columns: {len(df.columns)}\n\n"
-            text += f"Columns: {', '.join(df.columns)}\n\n"
-            text += f"First 5 rows:\n{df.head().to_string()}\n\n"
-            text += f"Data types:\n{df.dtypes.to_string()}\n\n"
-            text += f"Summary statistics:\n{df.describe().to_string()}"
-
+            text = (
+                f"Excel Data\nSheet: {sheet_name}\n\n"
+                f"Rows: {len(df)}, Columns: {len(df.columns)}\n\n"
+                f"Columns: {', '.join(df.columns)}\n\n"
+                f"First 5 rows:\n{df.head().to_string()}\n\n"
+                f"Data types:\n{df.dtypes.to_string()}\n\n"
+                f"Summary statistics:\n{df.describe().to_string()}"
+            )
             return text, schema
-
+        try:
+            return await asyncio.to_thread(_run)
         except Exception as e:
-            raise ValueError(f"Failed to parse Excel: {str(e)}")
+            raise ValueError(f"Failed to parse Excel: {e}")
 
     @staticmethod
     async def _parse_word(file_content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Parse Word document"""
         if not HAS_DOCX:
-            raise ValueError("python-docx not installed. Install with: pip install python-docx")
-
-        try:
+            raise ValueError("python-docx not installed")
+        def _run():
             doc = Document(io.BytesIO(file_content))
-
-            # Extract all paragraphs
-            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
-
-            # Extract tables
-            tables_data = []
-            for table in doc.tables:
-                table_rows = []
-                for row in table.rows:
-                    row_data = [cell.text for cell in row.cells]
-                    table_rows.append(row_data)
-                tables_data.append(table_rows)
-
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            tables_data = [
+                [[cell.text for cell in row.cells] for row in table.rows]
+                for table in doc.tables
+            ]
             schema = {
                 'file_type': 'docx',
                 'paragraphs': len(paragraphs),
                 'tables': len(tables_data),
-                'has_text': len(paragraphs) > 0,
-                'has_tables': len(tables_data) > 0,
             }
-
-            text = "Word Document Content:\n\n"
-            text += "Paragraphs:\n" + "\n".join(paragraphs[:20])  # First 20 paragraphs
-
+            text = "Word Document Content:\n\nParagraphs:\n" + "\n".join(paragraphs[:20])
             if tables_data:
                 text += "\n\nTables:\n"
-                for i, table_rows in enumerate(tables_data[:5]):  # First 5 tables
+                for i, rows in enumerate(tables_data[:5]):
                     text += f"\nTable {i+1}:\n"
-                    # Convert table to readable format
-                    df_table = pd.DataFrame(table_rows[1:], columns=table_rows[0] if table_rows else [])
-                    text += df_table.to_string()
-                    text += "\n"
-
+                    if rows:
+                        df_t = pd.DataFrame(rows[1:], columns=rows[0])
+                        text += df_t.to_string() + "\n"
             return text, schema
-
+        try:
+            return await asyncio.to_thread(_run)
         except Exception as e:
-            raise ValueError(f"Failed to parse Word document: {str(e)}")
+            raise ValueError(f"Failed to parse Word document: {e}")
 
     @staticmethod
     async def _parse_pdf(file_content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Parse PDF file using pdfplumber"""
         if not HAS_PDFPLUMBER:
-            raise ValueError("pdfplumber not installed. Install with: pip install pdfplumber")
-
-        try:
-            text_content = []
-            tables_data = []
-
+            raise ValueError("pdfplumber not installed")
+        def _run():
+            text_content, tables_data = [], []
             with pdfplumber.open(io.BytesIO(file_content)) as pdf:
                 num_pages = len(pdf.pages)
-
-                # Extract text and tables from first 10 pages (MVP)
-                for page_num, page in enumerate(pdf.pages[:10]):
-                    # Extract text
-                    text = page.extract_text()
-                    if text:
-                        text_content.append(f"--- Page {page_num + 1} ---\n{text}")
-
-                    # Extract tables
-                    tables = page.extract_tables()
-                    if tables:
-                        for table in tables:
-                            tables_data.append(table)
-
+                for i, page in enumerate(pdf.pages[:10]):
+                    t = page.extract_text()
+                    if t:
+                        text_content.append(f"--- Page {i+1} ---\n{t}")
+                    for tbl in (page.extract_tables() or []):
+                        tables_data.append(tbl)
             schema = {
                 'file_type': 'pdf',
                 'total_pages': num_pages,
                 'pages_parsed': min(10, num_pages),
-                'has_text': len(text_content) > 0,
                 'has_tables': len(tables_data) > 0,
-                'num_tables': len(tables_data),
             }
-
-            text = "PDF Content (first 10 pages):\n\n"
-            text += "\n".join(text_content)
-
+            text = "PDF Content (first 10 pages):\n\n" + "\n".join(text_content)
             if tables_data:
                 text += "\n\nExtracted Tables:\n"
-                for i, table in enumerate(tables_data[:5]):
+                for i, tbl in enumerate(tables_data[:5]):
                     text += f"\nTable {i+1}:\n"
-                    df_table = pd.DataFrame(table[1:], columns=table[0] if table else [])
-                    text += df_table.to_string()
-                    text += "\n"
-
+                    if tbl:
+                        df_t = pd.DataFrame(tbl[1:], columns=tbl[0])
+                        text += df_t.to_string() + "\n"
             return text, schema
-
+        try:
+            return await asyncio.to_thread(_run)
         except Exception as e:
-            raise ValueError(f"Failed to parse PDF: {str(e)}")
+            raise ValueError(f"Failed to parse PDF: {e}")
 
     @staticmethod
     async def _parse_json(file_content: bytes) -> Tuple[str, Dict[str, Any]]:
-        """Parse JSON file"""
-        try:
+        def _run():
             import json
-
             data = json.loads(file_content.decode('utf-8'))
-
-            # If it's a list of objects, convert to DataFrame
-            if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+            if isinstance(data, list) and data and isinstance(data[0], dict):
                 df = pd.json_normalize(data)
             elif isinstance(data, dict):
-                # If it's nested, try to extract common data structures
-                if 'data' in data:
-                    df = pd.json_normalize(data['data']) if isinstance(data['data'], list) else pd.DataFrame([data['data']])
-                elif 'items' in data:
-                    df = pd.json_normalize(data['items']) if isinstance(data['items'], list) else pd.DataFrame([data['items']])
-                else:
-                    df = pd.DataFrame([data])
+                key = 'data' if 'data' in data else ('items' if 'items' in data else None)
+                df = pd.json_normalize(data[key]) if key and isinstance(data[key], list) else pd.DataFrame([data])
             else:
                 df = pd.DataFrame([data])
-
             schema = {
                 'file_type': 'json',
                 'rows': len(df),
@@ -234,14 +178,14 @@ class FileParser:
                 'dtypes': {col: str(dtype) for col, dtype in df.dtypes.items()},
                 'sample': df.head(5).to_dict(orient='records'),
             }
-
-            text = "JSON Data:\n\n"
-            text += f"Rows: {len(df)}, Columns: {len(df.columns)}\n\n"
-            text += f"Columns: {', '.join(df.columns)}\n\n"
-            text += f"First 5 rows:\n{df.head().to_string()}\n\n"
-            text += f"Data types:\n{df.dtypes.to_string()}"
-
+            text = (
+                f"JSON Data:\n\nRows: {len(df)}, Columns: {len(df.columns)}\n\n"
+                f"Columns: {', '.join(df.columns)}\n\n"
+                f"First 5 rows:\n{df.head().to_string()}\n\n"
+                f"Data types:\n{df.dtypes.to_string()}"
+            )
             return text, schema
-
+        try:
+            return await asyncio.to_thread(_run)
         except Exception as e:
-            raise ValueError(f"Failed to parse JSON: {str(e)}")
+            raise ValueError(f"Failed to parse JSON: {e}")
