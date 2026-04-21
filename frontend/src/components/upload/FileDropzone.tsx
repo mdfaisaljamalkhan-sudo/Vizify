@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useDropzone } from 'react-dropzone'
 import { Upload, AlertCircle } from 'lucide-react'
 import { uploadFile, analyzeData, apiClient } from '@/api/client'
@@ -140,9 +141,13 @@ export function FileDropzone() {
     )
   }
 
-  // Full-screen animated processing overlay
+  // Full-screen animated processing overlay — rendered via Portal so it
+  // escapes any parent stacking context (overflow, shadow, transform).
   if (isLoading) {
-    return <ProcessingScreen progress={uploadProgress} label={progressLabel} />
+    return createPortal(
+      <ProcessingScreen progress={uploadProgress} label={progressLabel} />,
+      document.body
+    )
   }
 
   return (
