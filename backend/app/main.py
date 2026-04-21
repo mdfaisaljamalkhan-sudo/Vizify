@@ -25,9 +25,26 @@ app.add_middleware(
 # Initialize database tables on startup
 @app.on_event("startup")
 async def startup_event():
-    """Create all database tables on startup using the configured async engine."""
+    """Create all tables and ensure the shared anonymous user exists."""
+    from app.database import AsyncSessionLocal
+    from app.dependencies import DEMO_USER_ID
+    from sqlalchemy import select
+    import uuid
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.id == DEMO_USER_ID))
+        if not result.scalars().first():
+            db.add(User(
+                id=DEMO_USER_ID,
+                email="demo@vizify.app",
+                hashed_password="no-auth",
+                full_name="Vizify User",
+                tier="pro",
+            ))
+            await db.commit()
 
 # Register routers
 app.include_router(auth.router)
