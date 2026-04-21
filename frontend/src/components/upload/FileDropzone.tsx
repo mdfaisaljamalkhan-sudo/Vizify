@@ -6,6 +6,7 @@ import { useDashboardStore } from '@/store/dashboardStore'
 import { useNavigate } from 'react-router-dom'
 import { TemplatePicker } from './TemplatePicker'
 import { JoinProposer } from './JoinProposer'
+import { ProcessingScreen } from './ProcessingScreen'
 
 const ALLOWED_TYPES = ['.csv', '.xlsx', '.xls', '.docx', '.pdf', '.json']
 const MAX_SIZE = 25 * 1024 * 1024
@@ -137,6 +138,11 @@ export function FileDropzone() {
         onSkip={handleJoinSkip}
       />
     )
+  }
+
+  // Full-screen animated processing overlay
+  if (isLoading) {
+    return <ProcessingScreen progress={uploadProgress} label={progressLabel} />
   }
 
   return (
