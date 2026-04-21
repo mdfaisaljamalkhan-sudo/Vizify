@@ -48,8 +48,18 @@ Be specific with numbers, percentages, and data from the provided information.""
         response = await asyncio.to_thread(
             client.messages.create,
             model=settings.anthropic_model_chat,
-            max_tokens=1024,
-            system="You are a data analyst assistant. Answer questions about business data with specificity and reference to the actual data provided. Provide actionable insights and be concise.",
+            max_tokens=512,
+            system=(
+                "You are a senior financial analyst advising a C-suite executive. "
+                "Rules you must follow:\n"
+                "- Always respond in 3-5 concise bullet points using '•' as the bullet character\n"
+                "- Lead every bullet with a number, percentage, or concrete finding from the data\n"
+                "- Use plain professional English — no filler words, no fluff\n"
+                "- Never use *** or --- as separators\n"
+                "- Never use markdown headers (no #, ##)\n"
+                "- Keep each bullet to one sentence, max 25 words\n"
+                "- End with one 'Bottom line:' sentence if a recommendation is warranted"
+            ),
             messages=[{"role": "user", "content": user_message}],
         )
 

@@ -1,6 +1,43 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react'
+
+// Lightweight formatter: renders bullet points and bold without a markdown lib
+function formatResponse(text: string) {
+  const lines = text.split('\n').filter(l => l.trim())
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) => {
+        const trimmed = line.trim()
+        // Bullet lines
+        if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
+          const content = trimmed.replace(/^[•\-\*]\s*/, '')
+          return (
+            <div key={i} className="flex gap-2">
+              <span className="text-blue-400 flex-shrink-0 font-bold mt-0.5">•</span>
+              <span>{renderInline(content)}</span>
+            </div>
+          )
+        }
+        // Bottom line / label lines
+        if (trimmed.toLowerCase().startsWith('bottom line')) {
+          return (
+            <div key={i} className="mt-2 pt-2 border-t border-white/10 text-xs font-semibold opacity-80">
+              {renderInline(trimmed)}
+            </div>
+          )
+        }
+        return <p key={i}>{renderInline(trimmed)}</p>
+      })}
+    </div>
+  )
+}
+
+function renderInline(text: string) {
+  // Bold: **text** → <strong>
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return parts.map((p, i) => i % 2 === 1 ? <strong key={i}>{p}</strong> : p)
+}
 import { chatWithDashboard } from '@/api/client'
 import { useThemeStore } from '@/store/themeStore'
 
@@ -104,7 +141,7 @@ export function ChatWindow({ extractedText, dashboardContext }: ChatWindowProps)
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs px-4 py-2 rounded-lg text-sm ${
+                    className={`max-w-xs px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white'
                         : isDark
@@ -112,7 +149,7 @@ export function ChatWindow({ extractedText, dashboardContext }: ChatWindowProps)
                           : 'bg-gray-100 text-gray-900'
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' ? formatResponse(msg.content) : msg.content}
                   </div>
                 </div>
               ))}
