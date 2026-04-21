@@ -160,14 +160,15 @@ export function ChatWindow({ extractedText, dashboardContext }: ChatWindowProps)
         onClick={() => setIsOpen(!isOpen)}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className={`p-4 rounded-full shadow-lg transition-all ${
+        className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
           isDark
             ? 'bg-blue-700 hover:bg-blue-600 text-white'
             : 'bg-blue-600 hover:bg-blue-700 text-white'
         }`}
-        title="Chat with assistant"
+        title="Ask questions about your data"
       >
-        <MessageCircle className="w-6 h-6" />
+        <MessageCircle className="w-5 h-5" />
+        <span className="text-sm font-medium">Ask AI</span>
       </motion.button>
     </div>
   )

@@ -8,6 +8,7 @@ import { Header } from '@/components/Header'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ChatEditPanel } from '@/components/chat/ChatEditPanel'
 import { BriefButton } from '@/components/dashboard/BriefButton'
+import { FeatureBar } from '@/components/dashboard/FeatureBar'
 import { ChevronLeft } from 'lucide-react'
 
 export function Dashboard() {
@@ -85,7 +86,8 @@ export function Dashboard() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <FeatureBar />
         <div ref={dashboardRef} className="space-y-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 relative">
           {/* Version Badge */}
           <div className="absolute top-4 right-4 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-xs font-medium">

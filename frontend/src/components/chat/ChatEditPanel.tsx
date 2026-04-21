@@ -356,14 +356,15 @@ export function ChatEditPanel({
         onClick={() => setIsOpen(!isOpen)}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        className={`p-4 rounded-full shadow-lg transition-all ${
+        className={`flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all ${
           isDark
             ? 'bg-purple-700 hover:bg-purple-600 text-white'
             : 'bg-purple-600 hover:bg-purple-700 text-white'
         }`}
-        title="Edit dashboard"
+        title="Edit dashboard with AI — also supports What-If scenarios"
       >
-        <Edit3 className="w-6 h-6" />
+        <Edit3 className="w-5 h-5" />
+        <span className="text-sm font-medium">AI Edit</span>
       </motion.button>
     </div>
   )
