@@ -44,13 +44,20 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# SQLAlchemy — add SSL for Postgres (required by Supabase)
-_connect_args = {"ssl": "require"} if settings.database_url.startswith("postgresql") else {}
+# SQLAlchemy — add SSL + connection pool settings for Neon/Supabase serverless
+_is_postgres = settings.database_url.startswith("postgresql")
+_connect_args = {"ssl": "require"} if _is_postgres else {}
 engine = create_async_engine(
     settings.database_url,
     echo=settings.environment == "development",
     future=True,
     connect_args=_connect_args,
+    # Neon/Supabase close idle connections after ~5 min.
+    # pool_pre_ping re-checks the connection before use, preventing
+    # "connection is closed" errors on the first query after idle.
+    pool_pre_ping=True,
+    # Recycle connections every 5 min so we never hand out a dead one.
+    pool_recycle=300 if _is_postgres else -1,
 )
 
 AsyncSessionLocal = sessionmaker(
