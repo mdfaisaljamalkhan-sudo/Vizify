@@ -13,8 +13,8 @@ function formatResponse(text: string) {
         if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
           const content = trimmed.replace(/^[•\-\*]\s*/, '')
           return (
-            <div key={i} className="flex gap-2">
-              <span className="text-blue-400 flex-shrink-0 font-bold mt-0.5">•</span>
+            <div key={i} style={{ marginTop: i === 0 ? 0 : '10px' }} className="flex gap-2">
+              <span className="text-blue-400 flex-shrink-0 font-bold">•</span>
               <span>{renderInline(content)}</span>
             </div>
           )
