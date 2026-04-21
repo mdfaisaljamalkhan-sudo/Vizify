@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, Depends
 from anthropic import Anthropic
@@ -44,13 +45,12 @@ Now, please answer this question: {request.message}
 
 Be specific with numbers, percentages, and data from the provided information."""
 
-        response = client.messages.create(
+        response = await asyncio.to_thread(
+            client.messages.create,
             model=settings.anthropic_model_chat,
             max_tokens=1024,
             system="You are a data analyst assistant. Answer questions about business data with specificity and reference to the actual data provided. Provide actionable insights and be concise.",
-            messages=[
-                {"role": "user", "content": user_message}
-            ],
+            messages=[{"role": "user", "content": user_message}],
         )
 
         return ChatResponse(response=response.content[0].text)

@@ -1,6 +1,10 @@
+import asyncio
 import logging
 import json
+import re
 import uuid
+import tempfile
+import os
 from datetime import datetime
 from typing import Optional
 import pandas as pd
@@ -11,17 +15,29 @@ from sqlalchemy import select
 from app.database import settings
 from app.models.dashboard import Dashboard
 from app.models.dashboard_version import DashboardVersion
-from app.services.sandbox_executor import run_python
 from app.schemas.chat_edit import ChatEditResponse
 
 logger = logging.getLogger(__name__)
 
+# ── System prompt ─────────────────────────────────────────────────────────────
+EDIT_SYSTEM = """You are a dashboard editor. The user wants to modify a business dashboard.
+You receive the current dashboard JSON and a user request. Return ONLY the modified dashboard JSON.
+
+Rules:
+- Return valid JSON matching the same schema (same top-level keys)
+- Preserve all fields you are not asked to change
+- Do NOT add markdown, explanation, or backticks — return raw JSON only
+- dashboard_type must stay one of: pl_statement, bcg_matrix, swot, kpi_summary, market_analysis, general
+- trend must stay one of: up, down, flat
+- chart_type must stay one of: bar, line, pie, scatter, waterfall, quadrant"""
+
 
 class ChatEditorService:
-    """Service to handle LLM-driven dashboard edits with sandboxed code execution."""
 
     def __init__(self):
         self.client = Anthropic(api_key=settings.anthropic_api_key)
+
+    # ── Public entry point ────────────────────────────────────────────────────
 
     async def process_edit_request(
         self,
@@ -31,324 +47,241 @@ class ChatEditorService:
         extracted_text: str,
         db: AsyncSession,
     ) -> ChatEditResponse:
-        """
-        Process a user's edit request:
-        1. Fetch current dashboard
-        2. Generate edit code via LLM
-        3. Execute code in sandbox
-        4. Save as new version
-        5. Return modified dashboard
-        """
         try:
-            # Fetch current dashboard
-            stmt = select(Dashboard).where(
-                (Dashboard.id == dashboard_id) & (Dashboard.user_id == user_id)
-            )
-            result = await db.execute(stmt)
-            dashboard = result.scalars().first()
-
-            if not dashboard:
-                return ChatEditResponse(
-                    status="error",
-                    error="Dashboard not found or access denied",
+            # Load dashboard
+            result = await db.execute(
+                select(Dashboard).where(
+                    (Dashboard.id == dashboard_id) & (Dashboard.user_id == user_id)
                 )
+            )
+            dashboard = result.scalars().first()
+            if not dashboard:
+                return ChatEditResponse(status="error", error="Dashboard not found")
 
-            # Load dashboard data
             dashboard_data = dashboard.dashboard_data
             if isinstance(dashboard_data, str):
                 dashboard_data = json.loads(dashboard_data)
 
-            # Load parquet if available, fallback to extracted_text
-            dataframe = None
-            if dashboard.parquet_path:
-                try:
-                    dataframe = pd.read_parquet(dashboard.parquet_path)
-                except Exception as e:
-                    logger.warning(f"Failed to load parquet: {e}, falling back to CSV parse")
-
-            if dataframe is None:
-                # Parse extracted_text as CSV fallback
-                try:
-                    from io import StringIO
-                    dataframe = pd.read_csv(StringIO(extracted_text))
-                except Exception as e:
-                    logger.error(f"Failed to parse data: {e}")
-                    return ChatEditResponse(
-                        status="error",
-                        error="Unable to load dashboard data for editing",
-                    )
-
-            # What-if scenario path — don't run sandbox, just append scenario
+            # What-if scenario path
             if self._is_what_if(message):
-                scenario = await self._generate_scenario(message, dashboard_data)
-                if scenario:
-                    scenarios = dashboard_data.get("scenarios", [])
-                    scenarios = [s for s in scenarios if s.get("name") != scenario.get("name")]
-                    scenarios.append(scenario)
-                    dashboard_data = {**dashboard_data, "scenarios": scenarios}
-                    dashboard.dashboard_data = dashboard_data
-                    dashboard.updated_at = datetime.utcnow()
-                    await db.commit()
-                    return ChatEditResponse(
-                        status="success",
-                        dashboard_data=dashboard_data,
-                        edit_description=f"What-if: {scenario.get('name', message)}",
-                    )
+                return await self._handle_what_if(message, dashboard_data, dashboard, db)
 
-            # Generate edit code via LLM
-            generated_code = await self._generate_edit_code(
-                message=message,
-                dashboard_data=dashboard_data,
-                dataframe=dataframe,
-                extracted_text=extracted_text,
-            )
+            # ── Main path: ask LLM to return modified dashboard JSON ──────────
+            modified = await self._llm_edit_dashboard(message, dashboard_data, extracted_text)
 
-            if not generated_code:
+            if modified is None:
                 return ChatEditResponse(
                     status="error",
-                    error="Failed to generate edit code",
+                    error="Could not generate edit. Try rephrasing your request.",
                 )
 
-            # Execute generated code in sandbox
-            sandbox_result = run_python(generated_code, dataframe, timeout=5)
-
-            if sandbox_result["status"] != "success":
-                return ChatEditResponse(
-                    status="error",
-                    error=f"Execution failed: {sandbox_result['data']}",
-                    generated_code=generated_code,
-                )
-
-            # Extract modified dashboard from sandbox result
-            result_data = sandbox_result["data"]
-            if isinstance(result_data, dict):
-                # Result is returned as {"type": "...", "data": ...}
-                if result_data.get("type") == "dataframe":
-                    # Dataframe was modified, update dashboard_data
-                    dashboard_data = await self._update_dashboard_from_dataframe(
-                        dashboard_data, result_data["data"]
-                    )
-                elif result_data.get("type") == "json":
-                    # Direct dashboard modifications
-                    dashboard_data = result_data["data"]
-
-            # Save as new version
-            new_version_number = await self._get_next_version(dashboard_id, db)
-            await self._save_version(
-                dashboard_id=dashboard_id,
-                user_id=user_id,
-                version_number=new_version_number,
-                change_description=self._summarize_edit(message),
-                dashboard_data=dashboard_data,
-                db=db,
-            )
-
-            # Update dashboard
-            dashboard.dashboard_data = dashboard_data
+            # Persist version + update dashboard
+            version_num = await self._next_version(dashboard_id, db)
+            await self._save_version(dashboard_id, user_id, version_num,
+                                     self._summarize(message), modified, db)
+            dashboard.dashboard_data = modified
             dashboard.updated_at = datetime.utcnow()
             await db.commit()
 
             return ChatEditResponse(
                 status="success",
-                dashboard_data=dashboard_data,
-                edit_description=self._summarize_edit(message),
-                generated_code=generated_code,
-                execution_log={
-                    "sandbox_status": sandbox_result["status"],
-                    "execution_time": sandbox_result.get("execution_time", 0),
-                },
+                dashboard_data=modified,
+                edit_description=self._summarize(message),
             )
 
         except Exception as e:
-            logger.error(f"Edit request failed: {str(e)}")
-            return ChatEditResponse(
-                status="error",
-                error=f"Edit failed: {str(e)}",
+            logger.error(f"Edit request failed: {e}", exc_info=True)
+            return ChatEditResponse(status="error", error=f"Edit failed: {str(e)}")
+
+    # ── LLM dashboard editor ──────────────────────────────────────────────────
+
+    async def _llm_edit_dashboard(
+        self, message: str, dashboard_data: dict, extracted_text: str
+    ) -> Optional[dict]:
+        """Ask the LLM to return a modified dashboard_data dict as JSON."""
+        # Keep payload small: strip chart data arrays for large datasets
+        compact = self._compact_dashboard(dashboard_data)
+
+        prompt = f"""User request: "{message}"
+
+Current dashboard JSON:
+{json.dumps(compact, indent=2)}
+
+Data context (first 500 chars): {extracted_text[:500]}
+
+Return the complete modified dashboard JSON matching the exact same schema."""
+
+        try:
+            # Use asyncio.to_thread to avoid blocking the event loop
+            response = await asyncio.to_thread(
+                self.client.messages.create,
+                model=settings.anthropic_model_chat,
+                max_tokens=4096,
+                system=EDIT_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
             )
+            raw = response.content[0].text.strip()
+            return self._extract_json(raw, dashboard_data)
+        except Exception as e:
+            logger.error(f"LLM edit failed: {e}")
+            return None
+
+    def _compact_dashboard(self, data: dict) -> dict:
+        """Trim chart data arrays to max 5 rows so the prompt stays small."""
+        import copy
+        d = copy.deepcopy(data)
+        for chart in d.get("charts", []):
+            if isinstance(chart.get("data"), list) and len(chart["data"]) > 5:
+                chart["data"] = chart["data"][:5]
+                chart["_note"] = f"(data truncated to 5 rows for edit context)"
+        return d
+
+    def _extract_json(self, raw: str, fallback: dict) -> Optional[dict]:
+        """Extract JSON from LLM response, validate it has required keys."""
+        # Strip markdown fences
+        raw = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
+        raw = re.sub(r'```\s*$', '', raw, flags=re.MULTILINE).strip()
+
+        # Try direct parse
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and "title" in parsed:
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        # Try to find JSON object in the response
+        match = re.search(r'\{[\s\S]*\}', raw)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+                if isinstance(parsed, dict) and "title" in parsed:
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+
+        logger.error(f"Could not extract valid JSON from LLM response: {raw[:200]}")
+        return None
+
+    # ── What-if scenario ──────────────────────────────────────────────────────
 
     def _is_what_if(self, message: str) -> bool:
-        triggers = ["what if", "what happens if", "scenario", "if we", "if revenue", "if cost", "suppose", "assuming"]
+        triggers = ["what if", "what happens if", "scenario", "if we", "if revenue",
+                    "if cost", "suppose", "assuming"]
         return any(t in message.lower() for t in triggers)
 
-    async def _generate_scenario(self, message: str, dashboard_data: dict) -> Optional[dict]:
-        """Generate a what-if scenario object."""
+    async def _handle_what_if(
+        self, message: str, dashboard_data: dict, dashboard, db: AsyncSession
+    ) -> ChatEditResponse:
         kpis = dashboard_data.get("kpis", [])
         prompt = f"""The user asks: "{message}"
-Current KPIs: {json.dumps([{{'label': k['label'], 'value': k['value']}} for k in kpis])}
+Current KPIs: {json.dumps([{{"label": k["label"], "value": k["value"]}} for k in kpis])}
 
 Return ONLY a JSON object:
 {{
   "name": "Scenario name",
-  "description": "What changes",
+  "description": "What changes in 1-2 sentences",
   "kpi_deltas": [
-    {{"label": "KPI Label", "base_value": "current", "scenario_value": "new", "delta_pct": 10.0}}
+    {{"label": "KPI Label", "base_value": "current value", "scenario_value": "new value", "delta_pct": 10.0}}
   ]
 }}"""
         try:
-            resp = self.client.messages.create(
+            response = await asyncio.to_thread(
+                self.client.messages.create,
                 model=settings.anthropic_model_chat,
                 max_tokens=512,
                 messages=[{"role": "user", "content": prompt}],
             )
-            import re
-            text = resp.content[0].text.strip()
+            text = response.content[0].text.strip()
             match = re.search(r'\{[\s\S]*\}', text)
             if match:
-                return json.loads(match.group())
+                scenario = json.loads(match.group())
+                scenarios = dashboard_data.get("scenarios", [])
+                scenarios = [s for s in scenarios if s.get("name") != scenario.get("name")]
+                scenarios.append(scenario)
+                updated = {**dashboard_data, "scenarios": scenarios}
+                dashboard.dashboard_data = updated
+                dashboard.updated_at = datetime.utcnow()
+                await db.commit()
+                return ChatEditResponse(
+                    status="success",
+                    dashboard_data=updated,
+                    edit_description=f"What-if: {scenario.get('name', message)}",
+                )
         except Exception as e:
-            logger.error(f"Scenario generation failed: {e}")
-        return None
+            logger.error(f"What-if failed: {e}")
 
-    async def _generate_edit_code(
-        self,
-        message: str,
-        dashboard_data: dict,
-        dataframe: pd.DataFrame,
-        extracted_text: str,
-    ) -> Optional[str]:
-        """Generate Python code to modify the dashboard."""
-        prompt = f"""You are a Python code generator for dashboard editing.
+        return ChatEditResponse(status="error", error="Could not generate scenario")
 
-The user has this request: "{message}"
+    # ── Version management ────────────────────────────────────────────────────
 
-Current dashboard structure (top-level keys):
-{json.dumps(list(dashboard_data.keys()), indent=2)}
-
-Sample data (first 5 rows):
-{dataframe.head().to_string()}
-
-Data columns: {list(dataframe.columns)}
-
-Generate Python code that:
-1. Modifies the global variable `result` (a dict representing the modified dashboard)
-2. OR modifies `df` (the dataframe) and sets `result = df.to_dict('records')`
-
-Your code must:
-- Use only pandas/numpy/Python builtins
-- NOT import modules, read files, or call external APIs
-- Be safe and deterministic
-- Include the assignment `result = ...` at the end
-
-Generate ONLY the Python code, no explanations:
-"""
-
-        try:
-            response = self.client.messages.create(
-                model=settings.anthropic_model_chat,
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            code = response.content[0].text.strip()
-            # Clean up markdown code blocks if present
-            if code.startswith("```"):
-                code = code.split("```")[1]
-                if code.startswith("python"):
-                    code = code[6:]
-            if code.endswith("```"):
-                code = code.rsplit("```", 1)[0]
-            return code.strip()
-        except Exception as e:
-            logger.error(f"Code generation failed: {e}")
-            return None
-
-    async def _update_dashboard_from_dataframe(
-        self, dashboard_data: dict, modified_records: list
-    ) -> dict:
-        """Update dashboard data when dataframe is modified."""
-        # Store modified data records in dashboard
-        if "data" not in dashboard_data:
-            dashboard_data["data"] = {}
-        dashboard_data["data"]["modified_records"] = modified_records
-        dashboard_data["updated_at"] = datetime.utcnow().isoformat()
-        return dashboard_data
-
-    async def _get_next_version(self, dashboard_id: str, db: AsyncSession) -> int:
-        """Get next version number for a dashboard."""
-        stmt = select(DashboardVersion).where(
-            DashboardVersion.dashboard_id == dashboard_id
-        ).order_by(DashboardVersion.version_number.desc())
-        result = await db.execute(stmt)
+    async def _next_version(self, dashboard_id: str, db: AsyncSession) -> int:
+        result = await db.execute(
+            select(DashboardVersion)
+            .where(DashboardVersion.dashboard_id == dashboard_id)
+            .order_by(DashboardVersion.version_number.desc())
+        )
         latest = result.scalars().first()
         return (latest.version_number + 1) if latest else 1
 
     async def _save_version(
-        self,
-        dashboard_id: str,
-        user_id: str,
-        version_number: int,
-        change_description: str,
-        dashboard_data: dict,
-        db: AsyncSession,
+        self, dashboard_id: str, user_id: str, version_number: int,
+        change_description: str, dashboard_data: dict, db: AsyncSession
     ) -> None:
-        """Save a new version of the dashboard."""
-        version = DashboardVersion(
+        db.add(DashboardVersion(
             id=str(uuid.uuid4()),
             dashboard_id=dashboard_id,
             user_id=user_id,
             version_number=version_number,
             change_description=change_description,
             dashboard_data=dashboard_data,
-        )
-        db.add(version)
+        ))
         await db.commit()
 
-    def _summarize_edit(self, message: str) -> str:
-        """Create a short summary of the edit."""
-        if len(message) > 100:
-            return message[:97] + "..."
-        return message
+    def _summarize(self, message: str) -> str:
+        return message[:97] + "..." if len(message) > 100 else message
 
     async def get_edit_history(
         self, dashboard_id: str, user_id: str, db: AsyncSession
     ) -> list:
-        """Get version history for a dashboard."""
-        stmt = (
+        result = await db.execute(
             select(DashboardVersion)
             .where(
-                (DashboardVersion.dashboard_id == dashboard_id)
-                & (DashboardVersion.user_id == user_id)
+                (DashboardVersion.dashboard_id == dashboard_id) &
+                (DashboardVersion.user_id == user_id)
             )
             .order_by(DashboardVersion.version_number.desc())
         )
-        result = await db.execute(stmt)
-        versions = result.scalars().all()
         return [
             {
                 "version_number": v.version_number,
                 "change_description": v.change_description,
                 "created_at": v.created_at.isoformat(),
             }
-            for v in versions
+            for v in result.scalars().all()
         ]
 
     async def undo_to_version(
         self, dashboard_id: str, user_id: str, target_version: int, db: AsyncSession
     ) -> ChatEditResponse:
-        """Revert dashboard to a previous version."""
         try:
-            stmt = select(DashboardVersion).where(
-                (DashboardVersion.dashboard_id == dashboard_id)
-                & (DashboardVersion.version_number == target_version)
+            result = await db.execute(
+                select(DashboardVersion).where(
+                    (DashboardVersion.dashboard_id == dashboard_id) &
+                    (DashboardVersion.version_number == target_version)
+                )
             )
-            result = await db.execute(stmt)
             version = result.scalars().first()
-
             if not version:
-                return ChatEditResponse(
-                    status="error",
-                    error=f"Version {target_version} not found",
-                )
+                return ChatEditResponse(status="error",
+                                        error=f"Version {target_version} not found")
 
-            # Fetch and update dashboard
-            stmt = select(Dashboard).where(Dashboard.id == dashboard_id)
-            result = await db.execute(stmt)
-            dashboard = result.scalars().first()
-
+            result2 = await db.execute(
+                select(Dashboard).where(Dashboard.id == dashboard_id)
+            )
+            dashboard = result2.scalars().first()
             if not dashboard:
-                return ChatEditResponse(
-                    status="error",
-                    error="Dashboard not found",
-                )
+                return ChatEditResponse(status="error", error="Dashboard not found")
 
             dashboard.dashboard_data = version.dashboard_data
             dashboard.updated_at = datetime.utcnow()
@@ -359,10 +292,6 @@ Generate ONLY the Python code, no explanations:
                 dashboard_data=version.dashboard_data,
                 edit_description=f"Reverted to version {target_version}",
             )
-
         except Exception as e:
             logger.error(f"Undo failed: {e}")
-            return ChatEditResponse(
-                status="error",
-                error=f"Undo failed: {str(e)}",
-            )
+            return ChatEditResponse(status="error", error=f"Undo failed: {str(e)}")
