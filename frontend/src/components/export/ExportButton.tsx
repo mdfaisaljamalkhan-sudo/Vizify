@@ -128,7 +128,25 @@ async function svgToDataUrl(liveSvg: SVGElement): Promise<{ dataUrl: string; rec
 
 // ─── Main capture ─────────────────────────────────────────────────────────────
 async function captureToDataUrl(dashboardEl: HTMLElement): Promise<string> {
-  // 1. Rasterise all live SVG charts
+  // 0. Force light mode so all Tailwind dark: colours become their light counterparts.
+  //    This is the only reliable way to ensure readable contrast in exports.
+  const html = document.documentElement
+  const wasDark = html.classList.contains('dark')
+  if (wasDark) html.classList.remove('dark')
+
+  // Give the browser one frame to re-paint light-mode colours before we read
+  // computed styles for the clone.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+  try {
+    return await _capture(dashboardEl)
+  } finally {
+    if (wasDark) html.classList.add('dark')
+  }
+}
+
+async function _capture(dashboardEl: HTMLElement): Promise<string> {
+  // 1. Rasterise all live SVG charts (now in light-mode colours)
   const liveSvgs = Array.from(dashboardEl.querySelectorAll('svg')) as SVGElement[]
   const rasterised = await Promise.all(liveSvgs.map(svgToDataUrl))
 
