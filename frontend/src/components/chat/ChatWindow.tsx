@@ -6,7 +6,7 @@ import { MessageCircle, X, Send, Loader2 } from 'lucide-react'
 function formatResponse(text: string) {
   const lines = text.split('\n').filter(l => l.trim())
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2.5">
       {lines.map((line, i) => {
         const trimmed = line.trim()
         // Bullet lines
