@@ -33,7 +33,7 @@ export function FileDropzone() {
     setUploadProgress(95)
     setDashboard({ ...analyzeResponse.data.dashboard, id: saveResponse.data.id })
     setUploadProgress(100)
-    setTimeout(() => navigate('/quality'), 500)
+    setTimeout(() => navigate('/dashboard'), 500)
   }
 
   const onDrop = useCallback(
