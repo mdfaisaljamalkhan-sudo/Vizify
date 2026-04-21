@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, asc
 from pydantic import BaseModel
@@ -8,6 +9,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models import Dashboard
 from app.models.dashboard_comment import DashboardComment
+from app.services.realtime import event_stream, broadcast
 from app.schemas.dashboard import DashboardResponse, DashboardSchema
 
 router = APIRouter(prefix="/api/shared", tags=["shared"])
@@ -100,4 +102,21 @@ async def add_comment(share_token: str, body: CommentCreate, db: AsyncSession = 
     db.add(comment)
     await db.commit()
     await db.refresh(comment)
-    return CommentResponse(id=comment.id, author_name=comment.author_name, text=comment.text, created_at=comment.created_at.isoformat())
+
+    result = CommentResponse(
+        id=comment.id, author_name=comment.author_name,
+        text=comment.text, created_at=comment.created_at.isoformat()
+    )
+    # Broadcast new comment to all SSE listeners on this share channel
+    broadcast(f"share:{share_token}", "comment_added", result.model_dump())
+    return result
+
+
+@router.get("/{share_token}/stream")
+async def shared_stream(share_token: str):
+    """SSE stream for shared dashboard — receives dashboard_updated, comment_added, viewers events."""
+    return StreamingResponse(
+        event_stream(f"share:{share_token}"),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

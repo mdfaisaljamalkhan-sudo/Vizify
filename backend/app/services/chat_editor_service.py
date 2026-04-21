@@ -16,6 +16,7 @@ from app.database import settings
 from app.models.dashboard import Dashboard
 from app.models.dashboard_version import DashboardVersion
 from app.schemas.chat_edit import ChatEditResponse
+from app.services.realtime import broadcast
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,11 @@ class ChatEditorService:
             dashboard.dashboard_data = modified
             dashboard.updated_at = datetime.utcnow()
             await db.commit()
+
+            # Push live update to all SSE viewers (owner channel + share channel)
+            broadcast(dashboard_id, "dashboard_updated", modified)
+            if dashboard.share_token and dashboard.is_public:
+                broadcast(f"share:{dashboard.share_token}", "dashboard_updated", modified)
 
             return ChatEditResponse(
                 status="success",

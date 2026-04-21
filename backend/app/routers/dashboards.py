@@ -6,11 +6,12 @@ import secrets
 import json
 import uuid
 
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from app.database import get_db, settings
 from app.models import Dashboard
 from app.services.brief_generator import generate_executive_brief
 from app.services.pptx_exporter import generate_pptx
+from app.services.realtime import event_stream, broadcast
 from app.schemas.dashboard import (
     DashboardCreate,
     DashboardUpdate,
@@ -155,6 +156,9 @@ async def update_dashboard(
     await db.commit()
     await db.refresh(dashboard)
 
+    # Broadcast live update to all SSE viewers of this dashboard
+    broadcast(dashboard_id, "dashboard_updated", dashboard.dashboard_data)
+
     return DashboardResponse(
         id=dashboard.id,
         title=dashboard.title,
@@ -166,6 +170,19 @@ async def update_dashboard(
         share_token=dashboard.share_token,
         created_at=dashboard.created_at.isoformat(),
         updated_at=dashboard.updated_at.isoformat(),
+    )
+
+
+@router.get("/{dashboard_id}/stream")
+async def dashboard_stream(dashboard_id: str):
+    """SSE endpoint — streams dashboard_updated and viewers events."""
+    return StreamingResponse(
+        event_stream(dashboard_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Share2, Presentation, Loader2 } from 'lucide-react'
+import { Download, Share2, Presentation, Loader2, Copy, Check, X } from 'lucide-react'
 import jsPDF from 'jspdf'
 import { toPng } from 'html-to-image'
 import { apiClient } from '@/api/client'
@@ -200,7 +200,38 @@ async function _capture(dashboardEl: HTMLElement): Promise<string> {
 export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [exportingWhat, setExportingWhat] = useState<string | null>(null)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
+  const [copied, setCopied] = useState(false)
   const dashboard = useDashboardStore((s) => s.dashboard)
+
+  const handleShare = async () => {
+    if (!dashboard?.id) return
+    setSharing(true)
+    try {
+      const res = await apiClient.post(`/api/dashboards/${dashboard.id}/share`)
+      const token = res.data.share_token
+      const url = `${window.location.origin}/shared/${token}`
+      setShareUrl(url)
+    } catch (e) {
+      console.error('Share failed', e)
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const handleCopy = async () => {
+    if (!shareUrl) return
+    await navigator.clipboard.writeText(shareUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleUnshare = async () => {
+    if (!dashboard?.id) return
+    await apiClient.post(`/api/dashboards/${dashboard.id}/unshare`).catch(() => {})
+    setShareUrl(null)
+  }
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setIsExporting(true)
@@ -284,11 +315,52 @@ export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
         <Btn label="PPTX" onClick={exportPPTX} extraClass="bg-orange-600"
           icon={<Presentation className="w-4 h-4" />} />
       )}
-      <button disabled
-        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-500 rounded-lg text-sm cursor-not-allowed"
-      >
-        <Share2 className="w-4 h-4" /> Share
-      </button>
+      {dashboard?.id && (
+        <button
+          onClick={handleShare}
+          disabled={sharing}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
+        >
+          {sharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+          Share
+        </button>
+      )}
+
+      {/* Share URL modal */}
+      {shareUrl && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShareUrl(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white text-lg">Share Dashboard</h3>
+              <button onClick={() => setShareUrl(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+              Anyone with this link can view the dashboard live and add comments.
+            </p>
+            <div className="flex gap-2 mb-4">
+              <input
+                readOnly value={shareUrl}
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white select-all"
+                onClick={e => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={handleCopy}
+                className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Link is active until you stop sharing</span>
+              <button onClick={handleUnshare} className="text-xs text-red-500 hover:text-red-700 underline">
+                Stop sharing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
