@@ -66,6 +66,7 @@ class OpenAIAnalyzer(BaseAnalyzer):
                                             "enum": ["up", "down", "flat"],
                                         },
                                         "delta": {"type": "string"},
+                                        "source_code": {"type": "string"},
                                     },
                                     "required": ["label", "value", "trend", "delta"],
                                 },
@@ -97,6 +98,7 @@ class OpenAIAnalyzer(BaseAnalyzer):
                                             "type": "array",
                                             "items": {"type": "string"},
                                         },
+                                        "source_code": {"type": "string"},
                                     },
                                     "required": [
                                         "chart_type",

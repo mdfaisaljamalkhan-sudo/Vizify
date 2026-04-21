@@ -66,6 +66,10 @@ class ClaudeAnalyzer(BaseAnalyzer):
                                     "enum": ["up", "down", "flat"],
                                 },
                                 "delta": {"type": "string"},
+                                "source_code": {
+                                    "type": "string",
+                                    "description": "Short pandas expression showing how this KPI was derived, e.g. df['Revenue'].sum() or df['Profit'].mean()",
+                                },
                             },
                             "required": ["label", "value", "trend", "delta"],
                         },
@@ -96,6 +100,10 @@ class ClaudeAnalyzer(BaseAnalyzer):
                                 "y_keys": {
                                     "type": "array",
                                     "items": {"type": "string"},
+                                },
+                                "source_code": {
+                                    "type": "string",
+                                    "description": "Short pandas expression used to prepare this chart's data, e.g. df.groupby('Quarter')['Revenue'].sum()",
                                 },
                             },
                             "required": [
