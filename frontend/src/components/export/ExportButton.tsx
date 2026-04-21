@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Download, Share2, Presentation } from 'lucide-react'
-import html2canvas from 'html2canvas'
+import { Download, Share2, Presentation, Loader2 } from 'lucide-react'
+import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 import { apiClient } from '@/api/client'
 import { useDashboardStore } from '@/store/dashboardStore'
@@ -10,233 +10,145 @@ interface ExportButtonProps {
   fileName: string
 }
 
-function cloneAndInlineStyles(element: HTMLElement): HTMLElement {
-  const clone = element.cloneNode(true) as HTMLElement
-
-  const walk = (node: Node) => {
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      if (node.nodeType === Node.TEXT_NODE) return
-      for (let child of Array.from(node.childNodes)) walk(child)
-      return
-    }
-
-    const el = node as HTMLElement
-    const computed = window.getComputedStyle(el)
-
-    // Copy critical computed styles to inline
-    const stylesToCopy = [
-      'backgroundColor', 'color', 'borderColor', 'borderWidth', 'borderStyle',
-      'fontSize', 'fontWeight', 'fontFamily', 'padding', 'margin', 'display',
-      'width', 'height', 'minHeight', 'position', 'justifyContent', 'alignItems',
-      'flexDirection', 'gap', 'borderRadius', 'boxShadow', 'opacity', 'textAlign'
-    ]
-
-    stylesToCopy.forEach(prop => {
-      const value = computed.getPropertyValue(prop)
-      if (value && value !== 'rgba(0, 0, 0, 0)' && value !== 'transparent') {
-        try {
-          el.style[prop as any] = value
-        } catch (e) {
-          // ignore setter errors
-        }
-      }
-    })
-
-    // Remove classes to prevent oklch() issues (skip SVG elements)
-    if (!(el instanceof SVGElement)) {
-      el.className = ''
-    } else {
-      el.removeAttribute('class')
-    }
-
-    for (let child of Array.from(node.childNodes)) walk(child)
-  }
-
-  walk(clone)
-  return clone
+async function captureElement(el: HTMLElement): Promise<string> {
+  // html-to-image handles oklch colors and SVGs natively — no style cloning needed
+  return toPng(el, {
+    quality: 1,
+    pixelRatio: 2,
+    backgroundColor: '#ffffff',
+    // Ensure fonts are embedded
+    fetchRequestInit: { cache: 'no-cache' },
+    filter: (node) => {
+      // Skip hidden elements that could skew dimensions
+      if (node instanceof HTMLElement && node.style.display === 'none') return false
+      return true
+    },
+  })
 }
 
 export function ExportButton({ dashboardRef, fileName }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false)
+  const [exportingWhat, setExportingWhat] = useState<'png' | 'pdf' | 'pptx' | null>(null)
   const dashboard = useDashboardStore((s) => s.dashboard)
-
-  const exportPPTX = async () => {
-    if (!dashboard?.id) return
-    setIsExporting(true)
-    try {
-      const res = await apiClient.get(`/api/dashboards/${dashboard.id}/export/pptx`, { responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${fileName}.pptx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      console.error('PPTX export failed', e)
-    } finally {
-      setIsExporting(false)
-    }
-  }
 
   const exportPNG = async () => {
     if (!dashboardRef.current) return
-
     setIsExporting(true)
+    setExportingWhat('png')
     try {
-      console.log('Starting PNG export...')
-
-      // Clone element and inline all computed styles
-      const clonedElement = cloneAndInlineStyles(dashboardRef.current)
-      const tempContainer = document.createElement('div')
-      tempContainer.style.position = 'fixed'
-      tempContainer.style.left = '0'
-      tempContainer.style.top = '0'
-      tempContainer.style.zIndex = '-9999'
-      tempContainer.style.visibility = 'hidden'
-      tempContainer.appendChild(clonedElement)
-      document.body.appendChild(tempContainer)
-
-      try {
-        const canvas = await html2canvas(clonedElement, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          foreignObjectRendering: false,
-        })
-
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            console.error('Failed to create blob')
-            return
-          }
-          const url = URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = url
-          link.download = `${fileName}.png`
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          URL.revokeObjectURL(url)
-          console.log('PNG exported successfully')
-        }, 'image/png')
-      } finally {
-        document.body.removeChild(tempContainer)
-      }
-    } catch (error) {
-      console.error('PNG export failed:', error)
-      alert('Failed to export PNG: ' + (error instanceof Error ? error.message : String(error)))
+      const dataUrl = await captureElement(dashboardRef.current)
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `${fileName}.png`
+      link.click()
+    } catch (err) {
+      console.error('PNG export failed:', err)
+      alert('PNG export failed. Check console for details.')
     } finally {
       setIsExporting(false)
+      setExportingWhat(null)
     }
   }
 
   const exportPDF = async () => {
     if (!dashboardRef.current) return
-
     setIsExporting(true)
+    setExportingWhat('pdf')
     try {
-      console.log('Starting PDF export...')
+      const dataUrl = await captureElement(dashboardRef.current)
 
-      // Clone element and inline all computed styles
-      const clonedElement = cloneAndInlineStyles(dashboardRef.current)
-      const tempContainer = document.createElement('div')
-      tempContainer.style.position = 'fixed'
-      tempContainer.style.left = '0'
-      tempContainer.style.top = '0'
-      tempContainer.style.zIndex = '-9999'
-      tempContainer.style.visibility = 'hidden'
-      tempContainer.appendChild(clonedElement)
-      document.body.appendChild(tempContainer)
+      // Measure actual pixel size from the data URL
+      const img = new Image()
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = reject
+        img.src = dataUrl
+      })
 
-      try {
-        const canvas = await html2canvas(clonedElement, {
-          backgroundColor: '#ffffff',
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          foreignObjectRendering: false,
-        })
+      const imgW = img.naturalWidth / 2    // ÷2 because pixelRatio=2
+      const imgH = img.naturalHeight / 2
 
-        const imgData = canvas.toDataURL('image/png')
-        const pdf = new jsPDF('p', 'mm', 'a4')
+      // Fit to A4 landscape if wide, portrait if tall
+      const a4w = 297, a4h = 210
+      const orientation = imgW > imgH ? 'l' : 'p'
+      const [pageW, pageH] = orientation === 'l' ? [a4w, a4h] : [a4h, a4w]
 
-        const pdfWidth = pdf.internal.pageSize.getWidth()
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-        const pageHeight = pdf.internal.pageSize.getHeight()
+      const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
+      const scale = Math.min(pageW / imgW, pageH / imgH)
+      const drawW = imgW * scale
+      const drawH = imgH * scale
+      const offsetX = (pageW - drawW) / 2
+      const offsetY = (pageH - drawH) / 2
 
-        // Add first page
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      pdf.addImage(dataUrl, 'PNG', offsetX, offsetY, drawW, drawH)
 
-        // Add remaining pages if needed
-        let heightLeft = pdfHeight - pageHeight
-        let position = pageHeight
-
-        while (heightLeft > 0) {
+      // Add extra pages if content overflows
+      if (drawH > pageH) {
+        let remaining = drawH - pageH
+        let pos = pageH
+        while (remaining > 0) {
           pdf.addPage()
-          pdf.addImage(imgData, 'PNG', 0, -position, pdfWidth, pdfHeight)
-          heightLeft -= pageHeight
-          position += pageHeight
+          pdf.addImage(dataUrl, 'PNG', offsetX, offsetY - pos, drawW, drawH)
+          remaining -= pageH
+          pos += pageH
         }
-
-        // Use blob instead of direct save
-        const blob = pdf.output('blob')
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${fileName}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-        console.log('PDF exported successfully')
-      } finally {
-        document.body.removeChild(tempContainer)
       }
-    } catch (error) {
-      console.error('PDF export failed:', error)
-      alert('Failed to export PDF: ' + (error instanceof Error ? error.message : String(error)))
+
+      pdf.save(`${fileName}.pdf`)
+    } catch (err) {
+      console.error('PDF export failed:', err)
+      alert('PDF export failed. Check console for details.')
     } finally {
       setIsExporting(false)
+      setExportingWhat(null)
     }
   }
 
+  const exportPPTX = async () => {
+    if (!dashboard?.id) return
+    setIsExporting(true)
+    setExportingWhat('pptx')
+    try {
+      const res = await apiClient.get(`/api/dashboards/${dashboard.id}/export/pptx`, {
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${fileName}.pptx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('PPTX export failed:', err)
+      alert('PPTX export failed.')
+    } finally {
+      setIsExporting(false)
+      setExportingWhat(null)
+    }
+  }
+
+  const btn = (label: string, onClick: () => void, color: string, icon: React.ReactNode, which: string) => (
+    <button
+      onClick={onClick}
+      disabled={isExporting}
+      className={`inline-flex items-center gap-2 px-4 py-2 ${color} text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity text-sm`}
+    >
+      {isExporting && exportingWhat === which
+        ? <Loader2 className="w-4 h-4 animate-spin" />
+        : icon}
+      {isExporting && exportingWhat === which ? `Exporting…` : label}
+    </button>
+  )
+
   return (
-    <div className="flex gap-3">
-      <button
-        onClick={exportPNG}
-        disabled={isExporting}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
-        <Download className="w-4 h-4" />
-        PNG
-      </button>
-      <button
-        onClick={exportPDF}
-        disabled={isExporting}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
-        <Download className="w-4 h-4" />
-        PDF
-      </button>
-      {dashboard?.id && (
-        <button
-          onClick={exportPPTX}
-          disabled={isExporting}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
-        >
-          <Presentation className="w-4 h-4" />
-          PPTX
-        </button>
-      )}
+    <div className="flex gap-2 flex-wrap">
+      {btn('PNG', exportPNG, 'bg-blue-600', <Download className="w-4 h-4" />, 'png')}
+      {btn('PDF', exportPDF, 'bg-blue-600', <Download className="w-4 h-4" />, 'pdf')}
+      {dashboard?.id && btn('PPTX', exportPPTX, 'bg-orange-600', <Presentation className="w-4 h-4" />, 'pptx')}
       <button
         disabled
-        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-600 rounded-lg disabled:opacity-50 cursor-not-allowed"
-        title="Share feature coming soon"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-500 rounded-lg text-sm cursor-not-allowed"
+        title="Coming soon"
       >
         <Share2 className="w-4 h-4" />
         Share
