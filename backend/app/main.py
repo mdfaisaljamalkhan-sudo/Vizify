@@ -14,9 +14,12 @@ app = FastAPI(
 )
 
 # CORS Middleware
+# allow_origin_regex covers all Vercel preview/production deployments and HF Spaces.
+# Explicit origins retain credentials support for localhost dev.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"https://.*\.(vercel\.app|hf\.space|pages\.dev)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
