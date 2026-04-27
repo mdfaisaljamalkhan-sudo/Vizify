@@ -10,6 +10,9 @@ pinned: false
 
 # Vizify: Data-to-Dashboard Application
 
+**Live Demo:** [https://dist-mdfaisaljamalkhan-sudos-projects.vercel.app](https://dist-mdfaisaljamalkhan-sudos-projects.vercel.app)
+> Frontend hosted on Vercel · Backend on HuggingFace Spaces
+
 A full-stack MBA business dashboard generator that converts Excel, Word, CSV, PDF, and JSON files into interactive, visually stunning dashboards powered by Claude AI.
 
 **Target:** Desktop app (Windows PWA), Web SaaS, and Google Play Store
