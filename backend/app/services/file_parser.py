@@ -69,7 +69,9 @@ class FileParser:
     @staticmethod
     async def _parse_excel(file_content: bytes, filename: str) -> Tuple[str, Dict[str, Any]]:
         def _run():
-            excel_file = pd.ExcelFile(io.BytesIO(file_content))
+            ext = Path(filename).suffix.lower()
+            engine = 'xlrd' if ext == '.xls' else 'openpyxl'
+            excel_file = pd.ExcelFile(io.BytesIO(file_content), engine=engine)
             sheet_name = excel_file.sheet_names[0]
             df = excel_file.parse(sheet_name)
             schema = {

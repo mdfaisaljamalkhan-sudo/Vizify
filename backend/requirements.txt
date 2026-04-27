@@ -15,6 +15,7 @@ pydantic[email]
 chardet
 pandas
 openpyxl
+xlrd
 numpy
 python-dateutil
 jinja2

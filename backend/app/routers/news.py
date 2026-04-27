@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["news"])
 
 RSS_FEEDS = [
-    ("Reuters Business", "https://feeds.reuters.com/reuters/businessNews"),
-    ("BBC Business",     "http://feeds.bbci.co.uk/news/business/rss.xml"),
-    ("FT",               "https://www.ft.com/rss/home/uk"),
+    ("Yahoo Finance",  "https://finance.yahoo.com/news/rssindex"),
+    ("CNBC Business",  "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147"),
+    ("MarketWatch",    "https://feeds.marketwatch.com/marketwatch/topstories/"),
 ]
 
 GEMINI_PROMPT = (
