@@ -7,7 +7,7 @@ from typing import Tuple, Dict, Any
 import chardet
 
 try:
-    from python_docx import Document
+    from docx import Document
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False

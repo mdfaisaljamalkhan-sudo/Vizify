@@ -152,7 +152,7 @@ class AnalyzerService:
         """
         try:
             # Parse extracted_text as CSV to detect dates and numeric columns
-            df = pd.read_csv(StringIO(extracted_text), on_error='ignore')
+            df = pd.read_csv(StringIO(extracted_text), on_bad_lines='skip')
         except Exception as e:
             logger.warning(f"Failed to parse extracted_text for period analysis: {e}")
             return dashboard
