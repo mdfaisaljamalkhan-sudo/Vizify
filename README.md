@@ -62,32 +62,35 @@ npm run dev
 
 ## Key Features
 
-### MVP (Phase 1)
-- CSV/Excel file upload with drag-and-drop
-- Claude AI data analysis → structured dashboard JSON
-- KPI cards + bar/line/pie charts
-- PNG export
+### Upload & Parse
+- Drag-and-drop upload for CSV, Excel, PDF, Word, and JSON files
+- Multi-file join — drop multiple files to auto-join related datasets
+- MBA-specific templates: P&L, BCG Matrix, SWOT, Market, KPI layouts
+- Data quality analysis with automated issue detection
 
-### Phase 2
-- Word + PDF parsing
-- MBA-specific templates (P&L, BCG, SWOT, Porter's)
-- PDF export (jsPDF client-side, WeasyPrint server-side for Pro)
-- Dashboard save to SQLite
+### AI-Powered Dashboards
+- Claude AI converts raw data into a structured dashboard in seconds
+- KPI cards with formula transparency ("Show formula" under any metric)
+- Bar, line, pie, and composite charts — all auto-generated
+- Insights panel with AI-written takeaways for each chart
 
-### Phase 3
-- User authentication (JWT)
-- Share links + public dashboards
-- `/shared/:token` public viewing
+### Interactive Analysis
+- **AI Editor** — edit any chart or KPI in plain English (purple button)
+- **What-If modeling** — type "what if revenue grew 20%" to run scenarios
+- **Cross-filter** — click any bar or pie slice to filter all charts simultaneously
+- **AI Chat** — ask questions about your data in natural language
 
-### Phase 4
-- Stripe Checkout integration
-- Tier-based feature gating (Free/Pro/Business)
-- Usage limits per tier
+### Sharing & Export
+- One-click PNG export of the full dashboard
+- Executive Brief — one-page AI-written summary (PDF-ready)
+- Live share link — colleagues see edits in real time
+- Public `/shared/:token` view with no login required
 
-### Phase 5
-- Deploy to Railway (backend) + Vercel (frontend)
-- Custom domain setup
-- Google Play Store via Bubblewrap CLI
+### Platform
+- User authentication with JWT (register, login, persistent sessions)
+- Market news feed integrated into dashboards
+- Installable as a PWA (works offline, desktop shortcut)
+- Deployed on Vercel (frontend) + HuggingFace Spaces (backend)
 
 ---
 
