@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+
+# Environment files — never commit real env files
+.env.production
+.env.local
+.env.*.local

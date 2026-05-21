@@ -110,7 +110,7 @@ async def create_demo_account(
         user = User(
             id=str(uuid.uuid4()),
             email=demo_email,
-            hashed_password=hash_password("demo1234"),
+            hashed_password=hash_password(str(uuid.uuid4())),
             full_name="Demo User",
             tier="pro",  # Give demo account pro access
         )
