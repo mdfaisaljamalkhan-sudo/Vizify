@@ -15,6 +15,11 @@ COPY run_server.py .
 
 RUN mkdir -p uploads/parquets
 
+# Run as non-root for security
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser \
+    && chown -R appuser:appgroup /app
+USER appuser
+
 EXPOSE 8002
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8002}"]
